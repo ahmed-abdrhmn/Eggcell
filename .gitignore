@@ -1,0 +1,9 @@
+#this is to ignore extensionless files
+*
+!/**/
+!*.*
+#other files
+x64
+Release
+.vs
+Resource.aps
