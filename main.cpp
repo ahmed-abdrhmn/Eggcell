@@ -5,9 +5,11 @@
 
 LRESULT CALLBACK mainwndproc(HWND,UINT,WPARAM,LPARAM);
 
-const int RibbonHeight = 100;
+const int RibbonHeight = 0;
 const int MainWidth = 1280;
 const int MainHeight = 720;
+
+HWND gridwin;
 
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int cmdshow) {
 	
@@ -30,14 +32,14 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int cmdshow) {
 	wc.style = CS_OWNDC;
 	wc.cbClsExtra = 0;
 	wc.hCursor = LoadCursorW(NULL,(LPCWSTR) IDC_ARROW);
-	wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH));
+	wc.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
 	wc.hIcon = (HICON)LoadImageW(inst, MAKEINTRESOURCEW(5),IMAGE_ICON, 0 , 0, LR_DEFAULTSIZE);
 	wc.lpszClassName = L"Main";
 
 	ATOM mainclass = RegisterClassExW(&wc);
 
 	wc.lpfnWndProc = gridwndproc;
-	wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH));
+	wc.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
 	wc.lpszClassName = L"Grid";
 	
 	ATOM gridclass = RegisterClassExW(&wc);
@@ -54,15 +56,15 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int cmdshow) {
 
 	
 	HWND mainwin = CreateWindowW((LPCWSTR)(mainclass), L"Eggcell",
-		WS_VISIBLE|WS_SYSMENU|WS_MINIMIZEBOX,
+		WS_VISIBLE|WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT, windowrect.right - windowrect.left, windowrect.bottom - windowrect.top,
-		NULL, NULL, 
+		NULL,NULL, 
 		inst, NULL);
 
 	GetClientRect(mainwin, &windowrect);
 	windowrect.top += RibbonHeight;
 	
-	/*HWND gridwin =*/ CreateWindowW((LPCWSTR)(gridclass), L"Grid",
+	gridwin =CreateWindowW((LPCWSTR)(gridclass), L"Grid",
 		WS_CHILD| WS_VISIBLE | WS_VSCROLL | WS_HSCROLL,
 		windowrect.left, windowrect.top, windowrect.right - windowrect.left, windowrect.bottom - windowrect.top,
 		mainwin, (HMENU)1,
@@ -118,6 +120,12 @@ LRESULT CALLBACK mainwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 		if (wparam == 'R' || (lparam & (1u<<30)) == 1){
 			RedrawWindow(windowhandle,NULL,NULL, RDW_INVALIDATE);
 		}
+		break;
+	}
+	case WM_SIZE: {
+		RECT clientrect;
+		GetClientRect(windowhandle, &clientrect);
+		MoveWindow(gridwin, 0, RibbonHeight, clientrect.right, clientrect.bottom - RibbonHeight, TRUE);
 		break;
 	}
 	}

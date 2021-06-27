@@ -1,6 +1,7 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include "Formula.h"
 #include "Token.h"
 
 Value evalRPN(const std::vector<Token>& RPN);
@@ -224,7 +225,7 @@ public:
 	} 
 };
 
-std::vector<Token> evalexpr(const std::wstring& input) {
+IR* evalexpr(const std::wstring& input) {
 	std::vector<Token> tokens; //used as a stack
 	std::vector<Token> operators;
 
@@ -243,7 +244,7 @@ std::vector<Token> evalexpr(const std::wstring& input) {
 			while(operators.size()){ //empty operators
 				if (operators.back().op == Token::op::opbrac) {
 					std::wcout << L"*Invalid Input*\n"; //unmatched open bracket
-					return std::vector<Token>{ {Token::type::err, Value(), Token::op::null}};;
+					return (IR*)std::vector<Token>{ {Token::type::err, Value(), Token::op::null}}.data();;
 				}
 				tokens.push_back(operators.back());
 				operators.pop_back();
@@ -273,7 +274,7 @@ std::vector<Token> evalexpr(const std::wstring& input) {
 				}
 				else {
 					std::wcout << L"*Invalid Input*\n"; //unmatched close bracket
-					return std::vector<Token>{ {Token::type::err,Value(),Token::op::null}};
+					return (IR*)std::vector<Token>{ {Token::type::err,Value(),Token::op::null}}.data();
 				}
 			}
 			else {
@@ -289,72 +290,23 @@ std::vector<Token> evalexpr(const std::wstring& input) {
 
 		if (temp.type == Token::type::err) {
 			std::wcout << L"*Invalid Input*\n";
-			return std::vector<Token>{ {Token::type::err, Value(), Token::op::null}};;
+			return (IR*)std::vector<Token>{ {Token::type::err, Value(), Token::op::null}}.data();;
 		}
 
 	};
-	//for (auto i : tokens) {
-	//	
-	//	switch (i.type) {
-	//	case Token::type::null: {
-	//		std::cout << "NULL";
-	//		break;
-	//	}
-	//	case Token::type::value: {
-	//		if (i.lit.type() == Value::type::Number) {
-	//			std::cout << i.lit.num();
-	//		}
-	//		break;
-	//	}
-	//	case Token::type::op: {
-	//		switch (i.op)
-	//		{
-	//		case Token::op::badd: {
-	//			std::cout << '+';
-	//			break;
-	//		}
-	//		case Token::op::bsub: {
-	//			std::cout << '-';
-	//			break;
-	//		}
-	//		case Token::op::usub: {
-	//			std::cout << "-(unary)";
-	//			break;
-	//		}
-	//		case Token::op::mul: {
-	//			std::cout << '*';
-	//			break;
-	//		}
-	//		case Token::op::div: {
-	//			std::cout << '/';
-	//			break;
-	//		}
-	//		case Token::op::exp: {
-	//			std::cout << '^';
-	//			break;
-	//		}
-	//		case Token::op::mod: {
-	//			std::cout << '%';
-	//			break;
-	//		}
-	//		case Token::op::clbrac: {
-	//			std::cout << ')';
-	//			break;
-	//		}
-	//		
-	//		case Token::op::opbrac: {
-	//			std::cout << '(';
-	//			break;
-	//		}
-	//		}
-	//		break;
-	//	}
-	//	}
 
-	//	std::cout << " ";
-
-	//}
-	//std::cout << '\n';
-	
-	return tokens;
+	tokens.push_back(Token{ Token::type::null });
+	return (IR*)tokens.data();
 };
+
+std::vector<Index> extractIndicesFromIR(const IR* IRparam) {
+	Token* tptr = (Token*)IRparam;
+	std::vector<Index> toret;
+	while (tptr->type != Token::type::null && tptr->type != Token::type::err) {
+		if (tptr->isindex()) {
+			toret.push_back(tptr->index());
+		}
+		tptr++;
+	}
+	return toret;
+}

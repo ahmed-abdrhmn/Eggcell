@@ -1,3 +1,4 @@
+#include <Windows.h>
 #include <vector>
 #include "Token.h"
 
@@ -91,19 +92,21 @@ inline void exp(std::vector<Value>& numstack) {
 	return;
 }
 
-Value evalRPN(const std::vector<Token> &RPN , Value(& DrefIndex)(const Value&)) {
+Value evalIR(const IR* RPN , Value(& DrefIndex)(const Value&)) {
 	std::vector<Value> litstack;
-	for (auto currenttoken : RPN) {
-		if (currenttoken.type == Token::type::value) {
-			if (currenttoken.lit.type() != Value::type::Index) {
-				litstack.push_back(currenttoken.lit);
+	Token* currenttoken = (Token*)RPN;
+	while(currenttoken->type != Token::type::null && currenttoken->type != Token::type::err) {
+		MessageBoxA(NULL, "A token was scanned", "", MB_OK);
+		if (currenttoken->type == Token::type::value) {
+			if (currenttoken->lit.type() != Value::type::Index) {
+				litstack.push_back(currenttoken->lit);
 			}
 			else {
-				litstack.push_back(DrefIndex(currenttoken.lit));
+				litstack.push_back(DrefIndex(currenttoken->lit));
 			}
 		}
 		else{
-			switch (currenttoken.op) {
+			switch (currenttoken->op) {
 			case Token::op::badd: {
 				add(litstack);
 				break;
@@ -134,8 +137,9 @@ Value evalRPN(const std::vector<Token> &RPN , Value(& DrefIndex)(const Value&)) 
 			}
 			}
 		}
+		currenttoken++;
 	}
 
 	if (litstack.size() == 1)return litstack.front();
-	else return Value();
+	else return Value(); //error
 }
