@@ -1,0 +1,25 @@
+struct stackpair { _cell cell; std::unordered_set<unsigned>::const_iterator cabptr; };
+	std::stack<stackpair> sStack;
+
+	sStack.push(stackpair{ root });
+
+	sStack.top().cabptr = sStack.top().cell.affectby.cbegin();
+	while (true) {
+		if (sStack.top().cabptr != sStack.top().cell.affectby.cend()) {
+			if (*sStack.top().cabptr == rootindex) { return true; }
+			stackpair topush;
+			sStack.push(stackpair{ _GetCellVal(*sStack.top().cabptr) });
+			sStack.top().cabptr = sStack.top().cell.affectby.cbegin();
+		}
+		else {
+			sStack.pop();
+
+			if (sStack.size()) {
+				sStack.top().cabptr++;
+			}
+			else {
+				break;
+			}
+		}
+	}
+	return false;

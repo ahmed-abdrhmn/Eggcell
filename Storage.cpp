@@ -2,39 +2,29 @@
 #define INC_FORMULA_FUNCS
 #include "Storage.h"
 
-bool WorkSheet::SearchSelfRef(unsigned rootindex, const _cell& root) {
-	struct stackpair { _cell cell; std::unordered_set<unsigned>::const_iterator cabptr; };
-	std::stack<stackpair> sStack;
+#include <queue>
 
-	sStack.push(stackpair{ root });
-
-	sStack.top().cabptr = sStack.top().cell.affectby.cbegin();
-	while (true) {
-		if (sStack.top().cabptr != sStack.top().cell.affectby.cend()) {
-			if (*sStack.top().cabptr == rootindex) { return true; }
-			stackpair topush;
-			sStack.push(stackpair{ _GetCellVal(*sStack.top().cabptr) });
-			sStack.top().cabptr = sStack.top().cell.affectby.cbegin();
-		}
-		else {
-			sStack.pop();
-
-			if (sStack.size()) {
-				sStack.top().cabptr++;
-			}
-			else {
-				break;
-			}
+bool WorkSheet::SearchSelfRef(unsigned selfindex, unsigned rootindex) {
+	std::stack<unsigned> CellStack; //Depth first Search
+	CellStack.push(rootindex);
+	while (CellStack.size()) {
+		unsigned CurrentCell = CellStack.top();
+		
+		if (CurrentCell == selfindex)
+			return true;
+		
+		CellStack.pop();
+		for (unsigned DependentCell : _GetCellRef(CurrentCell).affectby) {
+			CellStack.push(DependentCell);
 		}
 	}
 	return false;
 }
 
-void WorkSheet::UpdateDependentCells(_cell& rootCell, std::unordered_set<Index>& UpdatedCells) {
+void WorkSheet::UpdateDependentCells(_cell& rootCell) {
 	for (auto i : rootCell.affecton) {
-		UpdatedCells.insert(Index{ 0x0000ffffu & i ,0xffff0000u & i });
 		_UpdateCell(WorkSheetData[i]);
-		UpdateDependentCells(WorkSheetData[i], UpdatedCells);
+		UpdateDependentCells(WorkSheetData[i]);
 	}
 	return;
 }
@@ -136,19 +126,19 @@ void WorkSheet::_UpdateCell(unsigned index) {
 }
 
 
-WorkSheet::StClInfo WorkSheet::SetCell(const wchar_t* input, unsigned column, unsigned row) {
-	unsigned thisindex = GetIndex(column, row);
-	_cell ToSet(_GetCellRef(thisindex));
+unsigned WorkSheet::SetCell(const wchar_t* input, unsigned column, unsigned row) {
+	unsigned SetIndex = GetIndex(column, row);
+	_cell ToSet(_GetCellRef(SetIndex));
 
 	ToSet.ExactInput = input;
 
 	//erase dependencies between the cell being edited and ones it refrences
 	for (auto i : ToSet.affectby) {
 		_cell& precedor(_GetCellRef(i));
-		precedor.affecton.erase(thisindex);
+		precedor.affecton.erase(SetIndex);
 	}
 	ToSet.affectby.clear();
-	//delete ToSet.RPN;
+	ToSet.RPN.clear();
 
 	if (*input == L'\0') /*if arg is an empty string*/ {
 		ToSet.type = _cell::type::null;
@@ -156,19 +146,18 @@ WorkSheet::StClInfo WorkSheet::SetCell(const wchar_t* input, unsigned column, un
 	}
 	else if (input[0] == L'=' && input[1] != L'\0') /*if arg is a formula*/ {
 		//formula handling
-		ToSet.RPN = evalexpr(input + 1);
+		ToSet.RPN = genIR(input + 1);
 		std::vector<Index> Indices = extractIndicesFromIR(ToSet.RPN);
 		//redecide dependencies
 		for (auto i : Indices) {
+			unsigned CurrentIndex = GetIndex(i.column, i.row);
 
-			_cell& indexedcell(_GetCellRef(i.column, i.row));
-
-			if (SearchSelfRef(thisindex, indexedcell)) {
-				return StClInfo{ SET_CELL_ERR_CIRCULAR_REF };
+			if (SearchSelfRef(SetIndex, CurrentIndex)) {
+				return SET_CELL_ERR_CIRCULAR_REF;
 			}
 
-			indexedcell.affecton.insert(thisindex);
-			ToSet.affectby.insert(GetIndex(i.column, i.row));
+			_GetCellRef(i.column, i.row).affecton.insert(SetIndex);
+			ToSet.affectby.insert(CurrentIndex);
 
 		}
 
@@ -205,10 +194,9 @@ WorkSheet::StClInfo WorkSheet::SetCell(const wchar_t* input, unsigned column, un
 
 	}
 
-	WorkSheetData[thisindex] = ToSet;
-	std::unordered_set<Index> UpdatedCells;
-	UpdateDependentCells(ToSet, UpdatedCells);
-	return StClInfo{ SET_CELL_OK,UpdatedCells };
+	WorkSheetData[SetIndex] = ToSet;
+	UpdateDependentCells(ToSet);
+	return SET_CELL_OK;
 }
 
 const WorkSheet::cell WorkSheet::GetCell(unsigned column, unsigned row) {
@@ -226,6 +214,25 @@ const WorkSheet::cell WorkSheet::GetCell(unsigned column, unsigned row) {
 		cell ToReturn;
 		ToReturn.type = cell::type::null;
 		return ToReturn;
+	}
+}
+
+std::vector<WorkSheet::CellIndexPair> WorkSheet::SerializeCells(void) {
+	std::vector<CellIndexPair> toret;
+	for (const auto& i : WorkSheetData) {
+		if (i.second.ExactInput.size() > 0u) { //to avoid serialising empty cells that affect other cells or werent deleted from the unordered_map
+			toret.push_back(
+				CellIndexPair{ (i.first & 0xffff000u) >> 16 ,i.first & 0xffffu,i.second.ExactInput }
+			);
+		}
+	}
+	return toret;
+}
+
+void WorkSheet::DeSerializeCells(const std::vector<WorkSheet::CellIndexPair>& cip) {
+	WorkSheetData.clear();
+	for (const auto& i : cip) {
+		SetCell(i.cellitem.data(), i.column, i.row);
 	}
 }
 

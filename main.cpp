@@ -1,6 +1,8 @@
 ﻿#include <Windows.h>
+#include<string>
 #include <string>
 #include "Grid.h"
+#include "resource1.h"
 
 
 LRESULT CALLBACK mainwndproc(HWND,UINT,WPARAM,LPARAM);
@@ -9,7 +11,8 @@ const int RibbonHeight = 0;
 const int MainWidth = 1280;
 const int MainHeight = 720;
 
-HWND gridwin;
+static HWND gridwin;
+static std::wstring currentfile = L"Untitiled.egg";
 
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int cmdshow) {
 	
@@ -31,11 +34,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int cmdshow) {
 	wc.hInstance = inst;
 	wc.style = CS_OWNDC;
 	wc.cbClsExtra = 0;
-	wc.hCursor = LoadCursorW(NULL,(LPCWSTR) IDC_ARROW);
+	wc.hCursor = LoadCursorW(inst,MAKEINTRESOURCEW(MyCursor_IDC));
 	wc.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
-	wc.hIcon = (HICON)LoadImageW(inst, MAKEINTRESOURCEW(5),IMAGE_ICON, 0 , 0, LR_DEFAULTSIZE);
+	wc.hIcon = (HICON)LoadImageW(inst, MAKEINTRESOURCEW(Fav),IMAGE_ICON, 0 , 0, LR_DEFAULTSIZE);
 	wc.lpszClassName = L"Main";
-
 	ATOM mainclass = RegisterClassExW(&wc);
 
 	wc.lpfnWndProc = gridwndproc;
@@ -43,7 +45,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int cmdshow) {
 	wc.lpszClassName = L"Grid";
 	
 	ATOM gridclass = RegisterClassExW(&wc);
-
+	
+	HMENU mainmenu = CreateMenu();
+	InsertMenuW(mainmenu, -1, MF_BYPOSITION | MF_STRING, 0, L"Open");
+	InsertMenuW(mainmenu, -1, MF_BYPOSITION | MF_STRING, 1, L"Save");
 
 	if (!mainclass) { return 120; }
 	if (!gridclass) { return 120; }
@@ -52,13 +57,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int cmdshow) {
 	windowrect.right +=  GetSystemMetrics(SM_CXFIXEDFRAME) + GetSystemMetrics(SM_CXVSCROLL) + 10;
 	windowrect.left -= GetSystemMetrics(SM_CXFIXEDFRAME);
 	windowrect.bottom += GetSystemMetrics(SM_CYHSCROLL) + GetSystemMetrics(SM_CYFIXEDFRAME) + 10;
-	windowrect.top -= GetSystemMetrics(SM_CYCAPTION) + GetSystemMetrics(SM_CYFIXEDFRAME);
-
+	windowrect.top -= GetSystemMetrics(SM_CYCAPTION) + GetSystemMetrics(SM_CYFIXEDFRAME) + GetSystemMetrics(SM_CYMENU);
 	
-	HWND mainwin = CreateWindowW((LPCWSTR)(mainclass), L"Eggcell",
+	HWND mainwin = CreateWindowW((LPCWSTR)(mainclass), L"Eggcell - Untitled.egg",
 		WS_VISIBLE|WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT, windowrect.right - windowrect.left, windowrect.bottom - windowrect.top,
-		NULL,NULL, 
+		NULL, mainmenu,
 		inst, NULL);
 
 	GetClientRect(mainwin, &windowrect);
@@ -126,6 +130,49 @@ LRESULT CALLBACK mainwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 		RECT clientrect;
 		GetClientRect(windowhandle, &clientrect);
 		MoveWindow(gridwin, 0, RibbonHeight, clientrect.right, clientrect.bottom - RibbonHeight, TRUE);
+		break;
+	}
+	case WM_COMMAND: {
+		if (HIWORD(wparam) == 0) { //comes from a menu
+			switch (LOWORD(wparam)) {
+			case 0: {
+				OPENFILENAMEW ofn = { 0 };
+				ofn.lStructSize = sizeof(OPENFILENAMEW);
+				ofn.hwndOwner = windowhandle;
+				ofn.lpstrFile = new WCHAR[256];     
+				ofn.lpstrFile[0] = L'\0';
+				ofn.nMaxFile = 256;
+				ofn.lpstrFilter = L"Egg Files (*.egg)\0*.egg\0";
+				ofn.Flags = OFN_ENABLESIZING | OFN_FILEMUSTEXIST;
+				BOOL open = GetOpenFileNameW(&ofn);
+				if (open) {	
+					LRESULT success = SendMessageW(gridwin, WM_OPEN, NULL, (LPARAM)&ofn);
+					if (success) {
+						currentfile = std::wstring(ofn.lpstrFile + ofn.nFileOffset);
+						SetWindowTextW(windowhandle, (std::wstring(L"Eggcell - ") + currentfile).c_str()); //Changing the window title to reflect opened file
+					}
+				}
+				delete[] ofn.lpstrFile;
+				break;
+			}
+			case 1: {
+				OPENFILENAMEW ofn = { 0 };
+				ofn.lStructSize = sizeof(OPENFILENAMEW);
+				ofn.hwndOwner = windowhandle;
+				ofn.lpstrFile = new WCHAR[256];
+				wcsncpy_s(ofn.lpstrFile, 256, currentfile.c_str(), 255);
+				ofn.nMaxFile = 256;
+				ofn.lpstrFilter = L"Egg Files (*.egg)\0*.egg\0";
+				ofn.Flags = OFN_ENABLESIZING| OFN_OVERWRITEPROMPT;
+				ofn.lpstrDefExt = L"egg";
+				BOOL save = GetSaveFileNameW(&ofn);
+				if (save) {
+					SendMessageW(gridwin, WM_SAVE, NULL, (LPARAM)&ofn);
+				}
+				break;
+			}
+			}
+		}
 		break;
 	}
 	}

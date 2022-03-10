@@ -1,5 +1,5 @@
-#include "Token.h"
 #include <math.h>
+#include "Formula.h"
 
 const char Token::prec[]{ 0,3,0,1,1,2,1,4,4 };
 

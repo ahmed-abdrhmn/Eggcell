@@ -4,24 +4,11 @@
 
 struct Index {
 	unsigned column; unsigned row;
-	bool operator ==(const Index& rhs) const noexcept {
-		return column == rhs.column && row == rhs.row;
-	}
 };
 
 inline unsigned GetIndex(unsigned column, unsigned row) {
 	return row | (column << 16);
 }
-
-namespace std {
-	template<>
-	class hash<Index> {
-	public:
-		size_t operator ()(const Index& arg) const {
-			return GetIndex(arg.column, arg.row);
-		}
-	};
-};
 
 class Value {
 public:
@@ -71,9 +58,21 @@ public:
 };
 
 
+struct Token {
+	enum class type { value, op, null, err } type;
+	Value lit;
+	enum class op { badd, usub, bsub, div, mul, exp, mod, opbrac, clbrac, null } op;
+	static const char prec[];
 
-struct IR;
+	bool isindex(void) const {
+		return type == type::value && lit.type() == Value::type::Index;
+	}
 
-IR* evalexpr(const std::wstring& input);
-std::vector<Index> extractIndicesFromIR(const IR* IRparam);
-Value evalIR(const IR* RPN, Value(&)(const Value&));
+	const Index& index(void) const {
+		return lit.ind();
+	}
+};
+
+std::vector<Token> genIR(const std::wstring& input);
+std::vector<Index> extractIndicesFromIR(const std::vector<Token>& IRparam);
+Value evalIR(const std::vector<Token>& RPN, Value(&)(const Value&));

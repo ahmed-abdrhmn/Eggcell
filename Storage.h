@@ -9,12 +9,7 @@
 #define SET_CELL_ERR_CIRCULAR_REF 1
 
 class WorkSheet {
-public:
-	struct StClInfo {
-		unsigned ReturnCode;
-		std::unordered_set<Index> UpdatedCells;
-	};
-	
+public:	
 	//This is the cell struct that is public
 	struct cell {
 		//relating to value of the cell
@@ -24,6 +19,13 @@ public:
 		double rl; //number stored(if type is number)
 		std::wstring ExactInput;
 	};
+
+	struct CellIndexPair {
+		unsigned column;
+		unsigned row;
+		std::wstring cellitem;
+	};
+
 private:
 	//This is the cell struct interally managed by the Worksheet class
 	struct _cell {
@@ -37,7 +39,7 @@ private:
 
 		//Structures used to calculate the value of the cell
 		std::wstring ExactInput;
-		IR* RPN;
+		std::vector<Token> RPN;
 
 		std::unordered_set<unsigned> affecton;
 		std::unordered_set<unsigned> affectby;
@@ -46,8 +48,8 @@ private:
 	std::unordered_map<unsigned, _cell> WorkSheetData;
 	static WorkSheet* CurrentWorksheet;
 
-	bool SearchSelfRef(unsigned rootindex, const _cell& root);
-	void UpdateDependentCells(_cell& rootCell, std::unordered_set<Index>& UpdatedCells);
+	bool SearchSelfRef(unsigned selfindex, unsigned rootindex);
+	void UpdateDependentCells(_cell& rootCell);
 	_cell& _GetCellRef(unsigned column, unsigned row);
 	_cell& _GetCellRef(unsigned index);
 	_cell _GetCellVal(unsigned index);
@@ -56,6 +58,8 @@ private:
 	void _UpdateCell(_cell& ToUpdate);
 	void _UpdateCell(unsigned index);
 public:
-	StClInfo SetCell(const wchar_t* input, unsigned column, unsigned row);
+	unsigned SetCell(const wchar_t* input, unsigned column, unsigned row);
 	const cell GetCell(unsigned column, unsigned row);
+	std::vector<CellIndexPair> SerializeCells(void);
+	void DeSerializeCells(const std::vector<CellIndexPair>& cip);
 };

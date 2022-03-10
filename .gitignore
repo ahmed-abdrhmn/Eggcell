@@ -1,9 +1,3 @@
-#this is to ignore extensionless files
-*
-!/**/
-!*.*
-#other files
 x64
 Debug
-.vs
-Resource.aps
+.vs/Eggcell/v16/Browse.VC.opendb

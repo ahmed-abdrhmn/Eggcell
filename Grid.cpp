@@ -11,8 +11,8 @@
 
 const COLORREF headercolor = RGB(181,251,193);
 
-const int sheetwidth = 50; //width of spreadsheet in cells
-const int sheetheight = 150; //height of spreadsheet in cells
+const int sheetwidth = 1024; //width of spreadsheet in cells
+const int sheetheight = 1024; //height of spreadsheet in cells
 
 LRESULT CALLBACK editproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM lparam);
 static WNDPROC oldeditproc;
@@ -30,7 +30,7 @@ const int clickrange = 4; //range of position before or after line where click w
 static unsigned short rowwidth[sheetheight];
 static unsigned short columnwidth[sheetwidth];
 static int rowheaderwidth = 35;
-static int columnheaderwidth = 25;
+static int columnheaderwidth = 35;
 
 
 inline int CeilDiv(int n, int d) { //divison such that the ceiling of the quotient is returned (if numerator and denominator have the same sign)
@@ -581,9 +581,9 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 		WCHAR* Buffer = new WCHAR[GetWindowTextLengthW(editctrl) + (size_t)1];
 		GetWindowTextW(editctrl, Buffer, INT_MAX);
 
-		WorkSheet::StClInfo SetCellInfo = OneWkst.SetCell(Buffer, EditX, EditY);
+		unsigned SetCellInfo = OneWkst.SetCell(Buffer, EditX, EditY);
 
-		if (SetCellInfo.ReturnCode == SET_CELL_ERR_CIRCULAR_REF) { //Set Cell fails
+		if (SetCellInfo == SET_CELL_ERR_CIRCULAR_REF) { //Set Cell fails
 			MessageBoxW(NULL, L"The cell directly or indirectly refrences itself in the formula", L"Self Reference", MB_OK | MB_ICONERROR);
 			SetFocus(editctrl);
 		}
@@ -695,6 +695,224 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 		else {
 			SendMessageW(windowhandle, WM_VSCROLL, SB_BOTTOM | scrollamt << 16, NULL);
 		}
+		break;
+	}
+	case WM_SAVE: {
+		OPENFILENAMEW* ofn = (OPENFILENAMEW*)lparam;
+		DWORD byteswritten;
+		HANDLE filehandle = CreateFileW(ofn->lpstrFile, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_FLAG_SEQUENTIAL_SCAN,NULL);
+		WriteFile(filehandle, "eggfile",7,&byteswritten,NULL);
+		
+		int buffer[4];
+
+		SCROLLINFO vsi; //vertical scroll info
+		SCROLLINFO hsi; //horizontal scroll info
+		vsi.cbSize = sizeof(vsi);											hsi.cbSize = sizeof(hsi);
+		vsi.fMask = SIF_POS;												hsi.fMask = SIF_POS;
+		GetScrollInfo(windowhandle, SB_VERT, &vsi);			GetScrollInfo(windowhandle, SB_HORZ, &hsi);
+
+		buffer[0] = _byteswap_ulong(hsi.nPos); //little to big endian
+		buffer[1] = _byteswap_ulong(vsi.nPos);
+		buffer[2] = _byteswap_ulong(sheetwidth);
+		buffer[3] = _byteswap_ulong(sheetheight);
+
+		WriteFile(filehandle, buffer, 4 * 4, &byteswritten, NULL);
+		
+		/*RLE encoding column widths*/ {
+			unsigned i = 0;
+			while (i < sheetwidth) {
+				unsigned short width = columnwidth[i];
+				unsigned count = 0u;
+				while (i < sheetwidth  && count <= UINT_MAX && columnwidth[i] == width) {
+					count++;
+					i++;
+				}
+				width = _byteswap_ushort(width); //little to big endian
+				count = _byteswap_ulong(count);
+				WriteFile(filehandle, &width, sizeof(width), &byteswritten, NULL);
+				WriteFile(filehandle, &count, sizeof(count), &byteswritten, NULL);
+			}
+		}
+
+		/*RLE encoding row widths*/ {
+			unsigned i = 0;
+			while (i < sheetheight) {
+				unsigned short width = rowwidth[i];
+				unsigned count = 0u;
+				while (i < sheetheight && count <= UINT_MAX  && rowwidth[i] == width) {
+					count++;
+					i++;
+				}
+				width = _byteswap_ushort(width); //little to big endian
+				count = _byteswap_ulong(count);
+				WriteFile(filehandle, &width, sizeof(width), &byteswritten, NULL);
+				WriteFile(filehandle, &count, sizeof(count), &byteswritten, NULL);
+			}
+		}
+
+		/*encoding the input data in the cells*/ {
+			std::vector<WorkSheet::CellIndexPair> cipvector = OneWkst.SerializeCells();
+			for (auto& i : cipvector) {
+				unsigned column = _byteswap_ulong( i.column); //little to big endian
+				unsigned row = _byteswap_ulong( i.row );
+				
+				WriteFile(filehandle, &column,sizeof(column),&byteswritten,NULL); //write column
+				WriteFile(filehandle, &row, sizeof(row), &byteswritten, NULL); //write row
+				
+				for (auto& j : i.cellitem) { //write exact input string to file
+					j = _byteswap_ushort(j); //again, little to big endian
+					WriteFile(filehandle, &j, sizeof(j), &byteswritten, NULL);
+				}
+				WriteFile(filehandle, L"\0", sizeof(wchar_t), &byteswritten, NULL); //null terminator
+			}
+		}
+
+		CloseHandle(filehandle);
+		break;
+	}
+	case WM_OPEN: {
+		if (EditWindow != NULL) { //make edit window dissappear if currently editing acell
+			DestroyWindow(EditWindow);
+		}
+		OPENFILENAMEW* ofn = (OPENFILENAMEW*)lparam;
+		DWORD bytesread;
+		HANDLE filehandle = CreateFileW(ofn->lpstrFile, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+		LRESULT toret = TRUE;
+		
+		//read header
+		char string[7];
+		//reading XScroll, YScroll, Sheetwidth and sheetheight
+		unsigned buffer[4];
+
+
+		std::vector<unsigned short> loadedcolumnwidths;
+		loadedcolumnwidths.reserve(256);
+		std::vector<unsigned short> loadedrowwidths;
+		loadedrowwidths.reserve(256);
+		std::vector<WorkSheet::CellIndexPair> cipvector; //loaded worksheet data
+
+		unsigned scrollwidth = 0u, scrollheight = 0u; //width and height of worksheet in pixels
+
+
+		(void)ReadFile(filehandle, string, 7, &bytesread, NULL);
+		if (bytesread < 7) { //Checking the file header
+			goto abort;
+		}
+		else if (memcmp(string, "eggfile", 7) != 0) {
+			goto abort;
+		}
+
+		(void)ReadFile(filehandle, buffer, 4 * sizeof(unsigned), &bytesread, NULL);
+		if (bytesread < 4 * sizeof(unsigned)) { //Checking the file header
+			goto abort;
+		}
+		buffer[2] = _byteswap_ulong(buffer[2]); //big to small endian
+		buffer[3] = _byteswap_ulong(buffer[3]);
+
+
+		/*Decompress RLE Column widths*/ {
+			while (loadedcolumnwidths.size() < buffer[2]) {
+				unsigned short width;
+				unsigned count;
+				
+				(void)ReadFile(filehandle, &width, sizeof(width), &bytesread, NULL);
+				if (bytesread < sizeof(width)) { goto abort;}
+				
+				(void)ReadFile(filehandle, &count, sizeof(count), &bytesread, NULL);
+				if (bytesread < sizeof(count)) { goto abort; }
+				
+				width = _byteswap_ushort(width); //big endian to small
+				count = _byteswap_ulong(count);
+				for (unsigned j = 0u; j < count; j++) {
+					loadedcolumnwidths.push_back(width);
+					scrollwidth += width;
+				}
+			}
+			if (loadedcolumnwidths.size() > buffer[2]) { goto abort; }
+		}
+
+		/*Decompress RLE Row widths*/ {
+			while (loadedrowwidths.size() < buffer[3]) {
+				unsigned short width;
+				unsigned count;
+				
+				(void)ReadFile(filehandle, &width, sizeof(width), &bytesread, NULL);
+				if (bytesread < sizeof(width)) { goto abort; }
+				
+				(void)ReadFile(filehandle, &count, sizeof(count), &bytesread, NULL);
+				if (bytesread < sizeof(count)) { goto abort; }
+
+				width = _byteswap_ushort(width); //big endian to small
+				count = _byteswap_ulong(count);
+				for (unsigned j = 0u; j < count; j++) {
+					loadedrowwidths.push_back(width);
+					scrollheight += width;
+				}
+			}
+			if (loadedrowwidths.size() > buffer[3]) { goto abort; }
+		}
+
+		/*Loading the data in the cells*/
+		while (1) {
+			cipvector.push_back(WorkSheet::CellIndexPair());
+			WorkSheet::CellIndexPair& temp = cipvector.back();
+			unsigned column;
+			unsigned row;
+
+			(void)ReadFile(filehandle, &column, sizeof(column), &bytesread, NULL);
+			if (bytesread == 0) { break; } //we have reached the end of the file
+			else if (bytesread < sizeof(column)) { goto abort; }
+
+			(void)ReadFile(filehandle, &row, sizeof(row), &bytesread, NULL);
+			if (bytesread < sizeof(row)) { goto abort; }
+
+			temp.column = _byteswap_ulong(column); //big to small endian
+			temp.row = _byteswap_ulong(row);
+
+			std::wstring data;
+			while (1) {
+				wchar_t character;
+				
+				(void)ReadFile(filehandle, &character, sizeof(character), &bytesread, NULL);
+				if(bytesread < sizeof(character)) { goto abort; }
+				
+				character = _byteswap_ushort(character);
+				if (character == L'\0') break;
+				
+				data.push_back(character);
+			}
+			temp.cellitem = std::move(data);
+		}
+
+		//The loading process has succeeded, now change current states
+
+		//update row and column widths
+		memcpy(rowwidth, loadedrowwidths.data(), loadedrowwidths.size() * sizeof(unsigned short));
+		memcpy(columnwidth, loadedcolumnwidths.data(), loadedcolumnwidths.size() * sizeof(unsigned short));
+		
+		//update scroll
+		SCROLLINFO vsi; //vertical scroll info
+		SCROLLINFO hsi; //horizontal scroll info
+		vsi.cbSize = sizeof(vsi);											       hsi.cbSize = sizeof(hsi);
+		vsi.fMask = SIF_POS|SIF_RANGE;							       hsi.fMask = SIF_POS|SIF_RANGE;
+		vsi.nMin = 0;                                                                    hsi.nMin = 0;
+		vsi.nMax = scrollheight;                                                   hsi.nMax = scrollwidth;
+		vsi.nPos = _byteswap_ulong(buffer[1]);                           hsi.nPos = _byteswap_ulong(buffer[0]); //big to little endian
+		SetScrollInfo(windowhandle, SB_VERT, &vsi,TRUE);	   SetScrollInfo(windowhandle, SB_HORZ, &hsi,TRUE);
+		
+		//update spreadsheet
+		OneWkst.DeSerializeCells(cipvector);
+
+		InvalidateRect(windowhandle, NULL, TRUE);
+		
+		goto notabort; //File loaded successfully so no need for the error
+	abort:
+		MessageBoxA(NULL, "Eggfile is invalid", "Invalid File", NULL);
+		toret = FALSE;
+	notabort:
+		
+		CloseHandle(filehandle);
+		return toret;
 	}
 	}
 

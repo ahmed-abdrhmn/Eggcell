@@ -1,0 +1,7 @@
+'eggfile'(7 byte)
+X Scroll(4 byte)
+Y Scroll(4 btye)
+Worksheet Width(4 byte)
+Worksheet Height(4 byte)
+Column Widths RLE (variable)
+Row Widths RLE (variable)

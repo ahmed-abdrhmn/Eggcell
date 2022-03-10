@@ -2,9 +2,6 @@
 #include <vector>
 #include <iostream>
 #include "Formula.h"
-#include "Token.h"
-
-Value evalRPN(const std::vector<Token>& RPN);
 
 
 class Lexxer {
@@ -57,17 +54,30 @@ public:
 	Lexxer(const std::wstring& input) :pointer(input.c_str()), FirstCallToNext(true), prevToken{Token::type::null}{};
 	Token next(void) {
 		FirstCallToNext = false; //now it is no longer the first time next is called
+
+		char32_t CChar; //Current Character
+		unsigned char Clength; //Length of the Codepoint (1 or 2 uint16_t's)
 		
+		if (0xD800 <= *pointer && *pointer <= 0xDFFF) {
+			CChar = ((*pointer & 0x03FF) << 16) | (*(pointer + 1) & 0x03FF);
+			CChar = CChar - 0x10000;
+			Clength = 2;
+		}
+		else {
+			CChar = *pointer;
+			Clength = 1;
+		}
+
 		//Token prevToken; //the token to return
-		while (std::isspace(*pointer)) { //skip spaces
-			pointer++;
+		while (std::isspace(CChar)) { //skip spaces
+			pointer += Clength;
 		}
 
 		//get symbol/number
-		switch (*pointer) {
+		switch (CChar) {
 		case L'+': {
 			if (isstart(prevToken) || isop(prevToken)) { // + is unary
-				pointer++;
+				pointer += Clength;
 				prevToken = next(); //done to ignore unary plusses as they are effectless
 				return prevToken;
 			}
@@ -77,7 +87,7 @@ public:
 			else {
 				prevToken = Token{ Token::type::err,0,Token::op::null }; //+ is error
 			}
-			pointer++; //the reason for this only being here is that strol automatically points to first char after the number
+			pointer += Clength;
 			break;
 		}
 		case L'-': {
@@ -90,7 +100,7 @@ public:
 			else {
 				prevToken = Token{ Token::type::err,0,Token::op::null }; //- is error
 			}
-			pointer++; //the reason for this only being here is that strol automatically points to first char after the number
+			pointer += Clength; //the reason for this only being here is that strol automatically points to first char after the number
 			break;
 		}
 		case L'*': {
@@ -100,7 +110,7 @@ public:
 			else {
 				prevToken = Token{ Token::type::err,0,Token::op::null };
 			}
-			pointer++; //the reason for this only being here is that strol automatically points to first char after the number
+			pointer += Clength; //the reason for this only being here is that strol automatically points to first char after the number
 			break;
 		}
 		case L'/': {
@@ -110,7 +120,7 @@ public:
 			else {
 				prevToken = Token{ Token::type::err,0,Token::op::null };
 			}
-			pointer++; //the reason for this only being here is that strol automatically points to first char after the number
+			pointer += Clength; //the reason for this only being here is that strol automatically points to first char after the number
 			break;
 		}
 		case L'^': {
@@ -120,7 +130,7 @@ public:
 			else {
 				prevToken = Token{ Token::type::err,0,Token::op::null };
 			}
-			pointer++; //the reason for this only being here is that strol automatically points to first char after the number
+			pointer += Clength; //the reason for this only being here is that strol automatically points to first char after the number
 			break;
 		}
 		case L'%': {
@@ -130,7 +140,7 @@ public:
 			else {
 				prevToken = Token{ Token::type::err,0,Token::op::null };
 			}
-			pointer++; //the reason for this only being here is that strol automatically points to first char after the number
+			pointer += Clength; //the reason for this only being here is that strol automatically points to first char after the number
 			break;
 		}
 		case L'(': {
@@ -140,7 +150,7 @@ public:
 			else {
 				prevToken = Token{ Token::type::err,0,Token::op::null };
 			}
-			pointer++; //the reason for this only being here is that strol automatically points to first char after the number
+			pointer += Clength; //the reason for this only being here is that strol automatically points to first char after the number
 			break;
 		}
 		case L')': {
@@ -150,7 +160,7 @@ public:
 			else {
 				prevToken = Token{ Token::type::err,0,Token::op::null };
 			}
-			pointer++; //the reason for this only being here is that strol automatically points to first char after the number
+			pointer += Clength; //the reason for this only being here is that strol automatically points to first char after the number
 			break;
 		}
 		case L'\"': {
@@ -163,7 +173,7 @@ public:
 				temp.push_back(*pointer);
 			}
 			prevToken = Token{Token::type::value,Value(temp),Token::op::null};
-			pointer++; //so that pointer points to first char AFTER the "
+			pointer += Clength;; //so that pointer points to first char AFTER the "
 			break;
 		}
 		//if end of string
@@ -176,7 +186,7 @@ public:
 			}
 			break;
 		}
-		// if not end of string or an operator then (for now) it must be a number or something invalid
+		// if not end of string or an operator then (for now) it must be a number or a referece(eg. A0) or something invalid
 		default: {
 		if (isstart(prevToken) || isop(prevToken)) {
 			const wchar_t* previous = pointer;
@@ -225,9 +235,9 @@ public:
 	} 
 };
 
-IR* evalexpr(const std::wstring& input) {
-	std::vector<Token> tokens; //used as a stack
-	std::vector<Token> operators;
+std::vector<Token> genIR(const std::wstring& input) {
+	std::vector<Token> tokens; 
+	std::vector<Token> operators; //used as a stack
 
 	/*const wchar_t* current = input.c_str();*/
 	/* read number or operator and add to tokens*/
@@ -242,9 +252,9 @@ IR* evalexpr(const std::wstring& input) {
 		if (temp.type == Token::type::null) { 
 			
 			while(operators.size()){ //empty operators
-				if (operators.back().op == Token::op::opbrac) {
-					std::wcout << L"*Invalid Input*\n"; //unmatched open bracket
-					return (IR*)std::vector<Token>{ {Token::type::err, Value(), Token::op::null}}.data();;
+				if (operators.back().op == Token::op::opbrac) { //unmatched open bracket
+					tokens = std::vector<Token>{ Token{Token::type::err} };
+					goto end; 
 				}
 				tokens.push_back(operators.back());
 				operators.pop_back();
@@ -273,13 +283,14 @@ IR* evalexpr(const std::wstring& input) {
 					operators.pop_back();
 				}
 				else {
-					std::wcout << L"*Invalid Input*\n"; //unmatched close bracket
-					return (IR*)std::vector<Token>{ {Token::type::err,Value(),Token::op::null}}.data();
+					//std::wcout << L"*Invalid Input*\n"; //unmatched close bracket
+					tokens = std::vector<Token>{ Token{Token::type::err} };
+					goto end;
 				}
 			}
 			else {
 				char CurrPrec = Token::prec[(int)temp.op];
-				while (operators.size() != 0 && ((Token::prec[(int)operators.back().op] > CurrPrec) || (Token::prec[(int)operators.back().op] == CurrPrec && temp.op != Token::op::usub)/*unary minus is the only right assoc operator*/ )) {
+				while (operators.size() != 0 && ((Token::prec[(int)operators.back().op] > CurrPrec) || (Token::prec[(int)operators.back().op] == CurrPrec && (temp.op != Token::op::usub && temp.op != Token::op::exp))/*unary minus and exponents are the only right assoc operator*/ )) {
 					if (operators.back().op == Token::op::opbrac)break;
 					tokens.push_back(operators.back());
 					operators.pop_back();
@@ -289,18 +300,20 @@ IR* evalexpr(const std::wstring& input) {
 		}
 
 		if (temp.type == Token::type::err) {
-			std::wcout << L"*Invalid Input*\n";
-			return (IR*)std::vector<Token>{ {Token::type::err, Value(), Token::op::null}}.data();;
+			//std::wcout << L"*Invalid Input*\n";
+			tokens = std::vector<Token>{ Token{Token::type::err} };
+			goto end;;
 		}
 
 	};
 
+end: 
 	tokens.push_back(Token{ Token::type::null });
-	return (IR*)tokens.data();
+	return tokens;
 };
 
-std::vector<Index> extractIndicesFromIR(const IR* IRparam) {
-	Token* tptr = (Token*)IRparam;
+std::vector<Index> extractIndicesFromIR(const std::vector<Token>& IRparam) {
+	const Token* tptr = &IRparam.front();
 	std::vector<Index> toret;
 	while (tptr->type != Token::type::null && tptr->type != Token::type::err) {
 		if (tptr->isindex()) {

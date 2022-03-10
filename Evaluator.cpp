@@ -1,6 +1,5 @@
-#include <Windows.h>
 #include <vector>
-#include "Token.h"
+#include "Formula.h"
 
 inline void mul(std::vector<Value> &numstack) {
 	Value rhs = *(numstack.cend() - 1);
@@ -92,11 +91,10 @@ inline void exp(std::vector<Value>& numstack) {
 	return;
 }
 
-Value evalIR(const IR* RPN , Value(& DrefIndex)(const Value&)) {
+Value evalIR(const std::vector<Token>& RPN , Value(& DrefIndex)(const Value&)) {
 	std::vector<Value> litstack;
-	Token* currenttoken = (Token*)RPN;
+	const Token* currenttoken = &RPN.front();
 	while(currenttoken->type != Token::type::null && currenttoken->type != Token::type::err) {
-		MessageBoxA(NULL, "A token was scanned", "", MB_OK);
 		if (currenttoken->type == Token::type::value) {
 			if (currenttoken->lit.type() != Value::type::Index) {
 				litstack.push_back(currenttoken->lit);
