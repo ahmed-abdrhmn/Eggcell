@@ -191,26 +191,33 @@ public:
 		if (isstart(prevToken) || isop(prevToken)) {
 			const wchar_t* previous = pointer;
 			
-			//Code that runs if The current token is an Index
+			//Code that runs if The current token is an Index or function
 			if(*pointer >= L'A' && *pointer <= L'Z'){
 				while (*++pointer >= L'A' && *pointer <= L'Z');//skip the letters
-				if (*pointer < L'0' || *pointer > L'9') {
-					prevToken = Token{ Token::type::err,Value(),Token::op::null };
-					return prevToken;
-				};
-				previous = pointer;
-				//extract the row
-				unsigned row = std::wcstol(pointer, (wchar_t**)&pointer, 0);
-				//extract the column
-				unsigned digitmul = 1;
-				unsigned column = 0;
-				while (*--previous >= L'A' && *previous <= L'Z') {
-					column += (*previous - L'A' + 1) * digitmul;
-					digitmul *= 26;
+				if (L'0' <= *pointer && *pointer <= L'9') {
+					previous = pointer;
+					//extract the row
+					unsigned row = std::wcstol(pointer, (wchar_t**)&pointer, 0);
+					//extract the column
+					unsigned digitmul = 1;
+					unsigned column = 0;
+					while (*--previous >= L'A' && *previous <= L'Z') {
+						column += (*previous - L'A' + 1) * digitmul;
+						digitmul *= 26;
+					}
+					column--;//from one base to zero base
+					prevToken = Token{ Token::type::value,Value(Index{column,row}),Token::op::null };
+					break;
 				}
-				column--;//from one base to zero base
-				prevToken = Token{ Token::type::value,Value(Index{column,row}),Token::op::null };
-				break;
+				else {
+					while (*pointer++ == L' '); //ignore spaces
+					if (*pointer == L'(') {
+						prevToken = Token{ Token::type::err,Value(),Token::op::null };
+						return prevToken;
+					}else{
+						//insert special code to parse functions.....
+					}
+				};
 			}
 
 

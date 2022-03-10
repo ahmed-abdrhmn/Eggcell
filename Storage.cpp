@@ -136,6 +136,9 @@ unsigned WorkSheet::SetCell(const wchar_t* input, unsigned column, unsigned row)
 	for (auto i : ToSet.affectby) {
 		_cell& precedor(_GetCellRef(i));
 		precedor.affecton.erase(SetIndex);
+		if (precedor.type == _cell::type::null && precedor.affecton.empty()) {
+			WorkSheetData.erase(i);
+		}
 	}
 	ToSet.affectby.clear();
 	ToSet.RPN.clear();
@@ -143,6 +146,9 @@ unsigned WorkSheet::SetCell(const wchar_t* input, unsigned column, unsigned row)
 	if (*input == L'\0') /*if arg is an empty string*/ {
 		ToSet.type = _cell::type::null;
 		ToSet.tt.clear();
+		if (ToSet.affecton.empty()) {
+			WorkSheetData.erase(SetIndex);
+		}
 	}
 	else if (input[0] == L'=' && input[1] != L'\0') /*if arg is a formula*/ {
 		//formula handling

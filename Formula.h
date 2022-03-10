@@ -59,7 +59,7 @@ public:
 
 
 struct Token {
-	enum class type { value, op, null, err } type;
+	enum class type { value, op, null, func ,err } type;
 	Value lit;
 	enum class op { badd, usub, bsub, div, mul, exp, mod, opbrac, clbrac, null } op;
 	static const char prec[];
