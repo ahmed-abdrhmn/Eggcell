@@ -3,7 +3,7 @@
 #include <string>
 #include "Grid.h"
 #include "resource1.h"
-
+#include <iostream>
 
 LRESULT CALLBACK mainwndproc(HWND,UINT,WPARAM,LPARAM);
 
@@ -27,6 +27,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int cmdshow) {
 	//	SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
 
 	SetProcessDPIAware(); //Disable DPI scaling so that window is not blurry
+
 
 	WNDCLASSEXW wc = {};
 	wc.lpfnWndProc = mainwndproc;
@@ -82,6 +83,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int cmdshow) {
 
 	//ToPrint.clear();
 	
+
 	if (!mainwin) { return 123; }
 
 	MSG msg;

@@ -1,5 +1,5 @@
 #include <vector>
-#include "Formula.h"
+#include "Functions.h"
 
 inline void mul(std::vector<Value> &numstack) {
 	Value rhs = *(numstack.cend() - 1);
@@ -103,7 +103,7 @@ Value evalIR(const std::vector<Token>& RPN , Value(& DrefIndex)(const Value&)) {
 				litstack.push_back(DrefIndex(currenttoken->lit));
 			}
 		}
-		else{
+		else if (currenttoken->type == Token::type::op){
 			switch (currenttoken->op) {
 			case Token::op::badd: {
 				add(litstack);
@@ -134,6 +134,9 @@ Value evalIR(const std::vector<Token>& RPN , Value(& DrefIndex)(const Value&)) {
 				break;
 			}
 			}
+		}
+		else { //token is a function
+			functions_map.at(currenttoken->function)(litstack); //the token MUST contain a function that is in the map so no need to check
 		}
 		currenttoken++;
 	}

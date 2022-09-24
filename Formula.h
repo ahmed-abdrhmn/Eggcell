@@ -10,6 +10,7 @@ inline unsigned GetIndex(unsigned column, unsigned row) {
 	return row | (column << 16);
 }
 
+
 class Value {
 public:
 	enum class type { Text, Number, Index, err };
@@ -61,8 +62,9 @@ public:
 struct Token {
 	enum class type { value, op, null, func ,err } type;
 	Value lit;
-	enum class op { badd, usub, bsub, div, mul, exp, mod, opbrac, clbrac, null } op;
+	enum class op { badd, usub, bsub, div, mul, exp, mod, opbrac, clbrac, fclb, fopb, null } op;
 	static const char prec[];
+	std::wstring function;
 
 	bool isindex(void) const {
 		return type == type::value && lit.type() == Value::type::Index;
