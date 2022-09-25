@@ -173,7 +173,7 @@ public:
 			break;
 		}
 		case L',': {
-			if (true) {
+			if (isnum(prevToken) || isclbrac(prevToken)) {
 				prevToken = Token{ Token::type::op,0,Token::op::comma };
 			}
 			else {
@@ -227,7 +227,7 @@ public:
 						MessageBoxA(NULL, "Function is detected!!!", "Detect", MB_OK);
 #endif
 						pointer = tempptr; //make sure the pointer moves forward
-						prevToken = Token{ Token::type::func,Value(),Token::op::null, func };
+						prevToken = Token{ Token::type::func,Value(),Token::op::null, func, 1}; //a function token with param count of 1
 						break;
 					}
 					
@@ -357,6 +357,16 @@ std::vector<Token> genIR(const std::wstring& input) {
 				while (operators.size() && (operators.back().op != Token::op::fopb)) { //let's try this...
 					tokens.push_back(operators.back());
 					operators.pop_back();
+				}
+				if (operators.size() >= 2) {
+					(operators.end() - 2)->paramcnt++; //increment the number of parameters in the function token
+				}
+				else {
+#ifdef _DEBUG
+					MessageBoxA(NULL, "The error was registered here: 366", "Error Detected", MB_OK);
+#endif
+					tokens = std::vector<Token>{ {Token::type::err} };
+					goto end;
 				}
 			}
 			else {

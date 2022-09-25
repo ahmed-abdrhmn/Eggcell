@@ -65,6 +65,7 @@ struct Token {
 	enum class op { badd, usub, bsub, div, mul, exp, mod, opbrac, clbrac, fclb, fopb, comma, null } op;
 	static const char prec[];
 	std::wstring function;
+	char paramcnt; //number of parameters
 
 	bool isindex(void) const {
 		return type == type::value && lit.type() == Value::type::Index;

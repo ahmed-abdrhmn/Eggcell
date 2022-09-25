@@ -136,7 +136,7 @@ Value evalIR(const std::vector<Token>& RPN , Value(& DrefIndex)(const Value&)) {
 			}
 		}
 		else { //token is a function
-			functions_map.at(currenttoken->function)(litstack); //the token MUST contain a function that is in the map so no need to check
+			functions_map.at(currenttoken->function)(litstack, currenttoken->paramcnt); //the token MUST contain a function that is in the map so no need to check
 		}
 		currenttoken++;
 	}
