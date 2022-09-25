@@ -62,7 +62,7 @@ public:
 struct Token {
 	enum class type { value, op, null, func ,err } type;
 	Value lit;
-	enum class op { badd, usub, bsub, div, mul, exp, mod, opbrac, clbrac, fclb, fopb, null } op;
+	enum class op { badd, usub, bsub, div, mul, exp, mod, opbrac, clbrac, fclb, fopb, comma, null } op;
 	static const char prec[];
 	std::wstring function;
 

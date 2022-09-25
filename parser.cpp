@@ -43,7 +43,8 @@ class Lexxer {
 
 	inline bool isstart(const Token& arg) {
 		return (arg.op == Token::op::opbrac) ||
-			(arg.type == Token::type::null);
+			(arg.type == Token::type::null) ||
+			(arg.op == Token::op::comma);
 	}
 
 	inline bool isend(const Token& arg) {
@@ -74,8 +75,8 @@ public:
 		}
 
 		//Token prevToken; //the token to return
-		while (std::isspace(CChar)) { //skip spaces
-			pointer += Clength;
+		while (std::isspace(*pointer)) { //skip spaces
+			pointer++;
 		}
 
 		//get symbol/number
@@ -169,6 +170,16 @@ public:
 				prevToken = Token{ Token::type::err,0,Token::op::null };
 			}
 			pointer += Clength; //the reason for this only being here is that strol automatically points to first char after the number
+			break;
+		}
+		case L',': {
+			if (true) {
+				prevToken = Token{ Token::type::op,0,Token::op::comma };
+			}
+			else {
+				prevToken = Token{ Token::type::err,0,Token::op::null };
+			}
+			pointer += Clength;
 			break;
 		}
 		case L'\"': {
@@ -340,6 +351,12 @@ std::vector<Token> genIR(const std::wstring& input) {
 					//std::wcout << L"*Invalid Input*\n"; //unmatched close bracket
 					tokens = std::vector<Token>{ {Token::type::err} };
 					goto end;
+				}
+			}
+			else if (temp.op == Token::op::comma) {
+				while (operators.size() && (operators.back().op != Token::op::fopb)) { //let's try this...
+					tokens.push_back(operators.back());
+					operators.pop_back();
 				}
 			}
 			else {
