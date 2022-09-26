@@ -86,6 +86,20 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int cmdshow) {
 
 	if (!mainwin) { return 123; }
 
+
+	//This part is reponsible for handling running the program by clicking on a file
+	if (wcslen(cmd) > 0) { //if this program was opened with a file parameter
+		OPENFILENAMEW ofn = { 0 };
+		ofn.lpstrFile = cmd;
+		ofn.nFileOffset = (WORD)(wcsrchr(cmd, L'\\') - cmd + 1);
+
+		LRESULT success = SendMessageW(gridwin, WM_OPEN, NULL, (LPARAM)&ofn);
+		if (success) {
+			currentfile = std::wstring(ofn.lpstrFile + ofn.nFileOffset);
+			SetWindowTextW(mainwin, (std::wstring(L"Eggcell - ") + currentfile).c_str()); //Changing the window title to reflect opened file
+		}
+	}
+
 	MSG msg;
 	while (GetMessageW(&msg, NULL, NULL, NULL)) {
 		TranslateMessage(&msg);
