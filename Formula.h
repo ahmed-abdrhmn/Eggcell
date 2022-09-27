@@ -6,6 +6,11 @@ struct Index {
 	unsigned column; unsigned row;
 };
 
+struct IndexRange {
+	unsigned column1,column2;
+	unsigned row1, row2;
+};
+
 inline unsigned GetIndex(unsigned column, unsigned row) {
 	return row | (column << 16);
 }
@@ -13,7 +18,7 @@ inline unsigned GetIndex(unsigned column, unsigned row) {
 
 class Value {
 public:
-	enum class type { Text, Number, Index, err };
+	enum class type { Text, Number, Index, IndexRange, err };
 
 private:
 	type _type;
@@ -21,6 +26,7 @@ private:
 		std::wstring _text;
 		double _number;
 		Index _index;
+		IndexRange _indexrange;
 	};
 public:
 
@@ -37,11 +43,15 @@ public:
 	const Index& ind()const {
 		return _index;
 	}
+	const IndexRange& indrange() const {
+		return _indexrange;
+	}
 	//ctors
 	Value(void);
 	Value(double num);
 	Value(std::wstring str);
 	Value(Index ind);
+	Value(IndexRange indrange);
 
 	Value(const Value& other);
 

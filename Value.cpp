@@ -11,6 +11,8 @@ Value::Value(std::wstring str):_type(type::Text),_text(str){}
 
 Value::Value(Index ind):_type(type::Index),_index(ind){}
 
+Value::Value(IndexRange indrange): _type(type::IndexRange), _indexrange(indrange) {};
+
 Value::Value(const Value& other) : _type(other._type) {
 	switch (other._type) {
 	case type::Text: {
@@ -23,6 +25,10 @@ Value::Value(const Value& other) : _type(other._type) {
 	}
 	case type::Index: {
 		_index = other._index;
+		break;
+	}
+	case type::IndexRange: {
+		_indexrange = other._indexrange;
 		break;
 	}
 	}
@@ -47,6 +53,10 @@ Value& Value::operator=(const Value& rhs) {
 	}
 	case type::Index: {
 		_index = rhs._index;
+		break;
+	}
+	case type::IndexRange: {
+		_indexrange = rhs._indexrange;
 		break;
 	}
 	}

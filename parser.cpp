@@ -61,6 +61,10 @@ public:
 	Token next(void) {
 		FirstCallToNext = false; //now it is no longer the first time next is called
 
+		while (std::isspace(*pointer)) { //skip spaces THEN get the character ... my bad
+			pointer++;
+		}
+
 		char32_t CChar; //Current Character
 		unsigned char Clength; //Length of the Codepoint (1 or 2 uint16_t's)
 		
@@ -74,10 +78,6 @@ public:
 			Clength = 1;
 		}
 
-		//Token prevToken; //the token to return
-		while (std::isspace(*pointer)) { //skip spaces
-			pointer++;
-		}
 
 		//get symbol/number
 		switch (CChar) {
@@ -246,7 +246,33 @@ public:
 						digitmul *= 26;
 					}
 					column--;//from one base to zero base
-					prevToken = Token{ Token::type::value,Value(Index{column,row}),Token::op::null };
+					
+					if (*pointer != L':') { //interpret as single index
+						prevToken = Token{ Token::type::value,Value(Index{column,row}),Token::op::null };
+						break; //break out of the switch statement
+					}
+
+					//interpret as an index range
+					pointer++; //skip the colon
+					while (*pointer >= L'A' && *pointer <= L'Z') { pointer++; }//again, skip the letters
+					if (*pointer < L'0' || *pointer > L'9') {
+						prevToken = Token{ Token::type::err,Value(),Token::op::null };
+						break;
+					}
+
+					previous = pointer;
+					//extract the second row
+					unsigned row2 = std::wcstol(pointer, (wchar_t**)&pointer, 0);
+					//extract the second column
+					digitmul = 1;
+					unsigned column2 = 0;
+					while (*--previous >= L'A' && *previous <= L'Z') {
+						column2 += (*previous - L'A' + 1) * digitmul;
+						digitmul *= 26;
+					}
+					column2--;//from one base to zero base
+
+					prevToken = Token{ Token::type::value,Value(IndexRange{column,column2,row,row2}),Token::op::null };
 					break; //break out of the switch statement
 				}
 				else {
@@ -268,8 +294,8 @@ public:
 			break;
 		}
 		else {
-				prevToken = Token{ Token::type::err,0,Token::op::null };
-				break;
+			prevToken = Token{ Token::type::err,0,Token::op::null };
+			break;
 		}
 		}
 		}
@@ -398,7 +424,24 @@ end:
 	for (auto i : tokens) {
 		switch (i.type) {
 		case Token::type::value: {
-			MessageBoxA(NULL,"value","TOKEN LIST",MB_OK);
+			switch (i.lit.type()) {
+			case Value::type::Text: {
+				MessageBoxA(NULL, "text value", "TOKEN LIST", MB_OK);
+				break;
+			}
+			case Value::type::Number: {
+				MessageBoxA(NULL, "number value", "TOKEN LIST", MB_OK);
+				break;
+			}
+			case Value::type::Index: {
+				MessageBoxA(NULL, "index value", "TOKEN LIST", MB_OK);
+				break;
+			}
+			case Value::type::IndexRange: {
+				MessageBoxA(NULL, "index range value", "TOKEN LIST", MB_OK);
+				break;
+			}
+			}
 			break;
 		}
 		case Token::type::op: {
