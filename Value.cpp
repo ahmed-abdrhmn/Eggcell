@@ -13,6 +13,8 @@ Value::Value(Index ind):_type(type::Index),_index(ind){}
 
 Value::Value(IndexRange indrange): _type(type::IndexRange), _indexrange(indrange) {};
 
+Value::Value(std::vector<Value>& valuelist) : _type(type::ValueList), _valuelist(valuelist) {};
+
 Value::Value(const Value& other) : _type(other._type) {
 	switch (other._type) {
 	case type::Text: {
@@ -31,10 +33,15 @@ Value::Value(const Value& other) : _type(other._type) {
 		_indexrange = other._indexrange;
 		break;
 	}
+	case type::ValueList: {
+		new (&_valuelist) std::vector<Value>(other._valuelist);
+		break;
+	}
 	}
 }
 
 Value& Value::operator=(const Value& rhs) {
+	//handling construction or destrucion of the text subobject
 	if (_type == type::Text && rhs._type != type::Text) {
 		_text.~basic_string();
 	}
@@ -42,6 +49,16 @@ Value& Value::operator=(const Value& rhs) {
 		new(&_text) std::wstring(rhs._text);
 	}
 	else if (_type == type::Text && rhs._type == type::Text) {
+		_text = rhs._text;
+	}
+	//handling construction or destruction of the valuelist subobject
+	if (_type == type::ValueList && rhs._type != type::ValueList) {
+		_valuelist.~vector();
+	}
+	else if (_type != type::ValueList && rhs._type == type::ValueList) {
+		new(&_valuelist) std::vector<Value>(rhs._valuelist);
+	}
+	else if (_type == type::ValueList && rhs._type == type::ValueList) {
 		_text = rhs._text;
 	}
 

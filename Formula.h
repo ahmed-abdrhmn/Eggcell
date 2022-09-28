@@ -18,7 +18,7 @@ inline unsigned GetIndex(unsigned column, unsigned row) {
 
 class Value {
 public:
-	enum class type { Text, Number, Index, IndexRange, err };
+	enum class type { Text, Number, Index, IndexRange, ValueList, err };
 
 private:
 	type _type;
@@ -27,6 +27,7 @@ private:
 		double _number;
 		Index _index;
 		IndexRange _indexrange;
+		std::vector<Value> _valuelist;
 	};
 public:
 
@@ -46,12 +47,16 @@ public:
 	const IndexRange& indrange() const {
 		return _indexrange;
 	}
+	std::vector<Value>& valuelist() { //we make an exception of constness for value list because...easier to code I guess?
+		return _valuelist;
+	}
 	//ctors
 	Value(void);
 	Value(double num);
 	Value(std::wstring str);
 	Value(Index ind);
 	Value(IndexRange indrange);
+	Value(std::vector<Value>& valuelist);
 
 	Value(const Value& other);
 
@@ -81,8 +86,16 @@ struct Token {
 		return type == type::value && lit.type() == Value::type::Index;
 	}
 
+	bool isindexrange(void) const {
+		return type == type::value && lit.type() == Value::type::IndexRange;
+	}
+
 	const Index& index(void) const {
 		return lit.ind();
+	}
+
+	const IndexRange& indexrange(void) const {
+		return lit.indrange();
 	}
 };
 

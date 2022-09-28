@@ -45,19 +45,64 @@ const std::unordered_map<std::wstring, funcptr > functions_map = {
 		numstack.push_back(result);
 	}},
 	{L"AVG",[](std::vector<Value>& numstack, char paramcnt)->void {	
-		if (paramcnt < 2) {
+		if (paramcnt < 1) {
 			numstack.push_back(Value()); //push an error to the top of the stack, note that this is a very hacky way to signal an error but it SHOULD work 🤔
 			return;
 		}
 
 		double total = 0;
-
+		double count = 0;
 		for (int i = 0; i < paramcnt; i++) {
-			total += (numstack.end() - 1)->num();
+			Value& top(numstack.back());
+			if (top.type() == Value::type::Number) {
+				total += top.num();
+				count += 1;
+			}
+			else if (top.type() == Value::type::ValueList) {
+				for (Value i : top.valuelist()) {
+					if (i.type() == Value::type::Number) {
+						total += i.num();
+						count += 1;
+					}
+				}
+			}
+			else {
+				numstack.push_back(Value()); //again, this effectively means returning an error
+				return;
+			}
 			numstack.pop_back();
 		}
 
-		Value result(total / (double)paramcnt);
+		Value result(total / count);
+		numstack.push_back(result);
+	}},
+	{L"SUM",[](std::vector<Value>& numstack, char paramcnt)->void {
+		if (paramcnt < 1) {
+			numstack.push_back(Value()); //push an error to the top of the stack, note that this is a very hacky way to signal an error but it SHOULD work 🤔
+			return;
+		}
+
+		double total = 0;
+		for (int i = 0; i < paramcnt; i++) {
+			Value& top(numstack.back());
+			if (top.type() == Value::type::Number) {
+				total += top.num();
+			}
+			else if (top.type() == Value::type::ValueList) {
+				for (Value i : top.valuelist()) {
+					if (i.type() == Value::type::Number) {
+						total += i.num();
+					}
+				}
+			}
+			else {
+				numstack.push_back(Value()); //again, this effectively means returning an error
+				return;
+			}
+			numstack.pop_back();
+		}
+
+		Value result(total);
 		numstack.push_back(result);
 	}}
 };

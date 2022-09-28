@@ -96,11 +96,20 @@ Value evalIR(const std::vector<Token>& RPN , Value(& DrefIndex)(const Value&)) {
 	const Token* currenttoken = &RPN.front();
 	while(currenttoken->type != Token::type::null && currenttoken->type != Token::type::err) {
 		if (currenttoken->type == Token::type::value) {
-			if (currenttoken->lit.type() != Value::type::Index) {
-				litstack.push_back(currenttoken->lit);
+			if (currenttoken->lit.type() == Value::type::Index) {
+				litstack.push_back(DrefIndex(currenttoken->lit));
+			}
+			else if (currenttoken->lit.type() == Value::type::IndexRange) {
+				std::vector<Value> values;
+				for (unsigned i = currenttoken->lit.indrange().column1; i <= currenttoken->lit.indrange().column2; i++) {
+					for (unsigned j = currenttoken->lit.indrange().row1; j <= currenttoken->lit.indrange().row2; j++) {
+						values.push_back(DrefIndex(Value(Index{ i,j })));
+					}
+				}
+				litstack.push_back(Value(values));
 			}
 			else {
-				litstack.push_back(DrefIndex(currenttoken->lit));
+				litstack.push_back(currenttoken->lit);
 			}
 		}
 		else if (currenttoken->type == Token::type::op){
