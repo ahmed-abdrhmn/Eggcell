@@ -61,19 +61,45 @@ WorkSheet::_cell WorkSheet::_GetCellVal(unsigned column, unsigned row) {
 
 
 Value WorkSheet::DrefIndexValue(const Value& value) {
-	_cell Indexed(CurrentWorksheet->_GetCellVal(value.ind().column, value.ind().row));
+	if (value.type() == Value::type::Index) { //value is a single index
+		_cell Indexed(CurrentWorksheet->_GetCellVal(value.ind().column, value.ind().row));
 
-	switch (Indexed.type)
-	{
-	case _cell::type::tt: {
-		return Value(Indexed.tt);
+		switch (Indexed.type)
+		{
+		case _cell::type::tt: {
+			return Value(Indexed.tt);
+		}
+		case _cell::type::rl: {
+			return Value(Indexed.rl);
+		}
+		default: {
+			return Value();
+		}
+		}
 	}
-	case _cell::type::rl: {
-		return Value(Indexed.rl);
-	}
-	default: {
-		return Value();
-	}
+	else { //value is an index range
+		std::vector<Value> valuelist;
+
+		for (unsigned i = value.indrange().column1; i <= value.indrange().column2; i++) {
+			for (unsigned j = value.indrange().row1; j <= value.indrange().row2; j++) {
+				_cell Indexed(CurrentWorksheet->_GetCellVal(i, j));
+
+				switch (Indexed.type)
+				{
+				case _cell::type::tt: {
+					valuelist.push_back(Value(Indexed.tt));
+				}
+				case _cell::type::rl: {
+					valuelist.push_back(Value(Indexed.rl));
+				}
+				default: {
+					valuelist.push_back(Value());
+				}
+				}
+			}
+		}
+
+		return Value(valuelist);
 	}
 };
 
@@ -153,17 +179,33 @@ unsigned WorkSheet::SetCell(const wchar_t* input, unsigned column, unsigned row)
 	else if (input[0] == L'=' && input[1] != L'\0') /*if arg is a formula*/ {
 		//formula handling
 		ToSet.RPN = genIR(input + 1);
-		std::vector<Index> Indices = extractIndicesFromIR(ToSet.RPN);
+		std::vector<Value> Indices = extractIndicesFromIR(ToSet.RPN); //get all the indices and indexranges in the inputted formula
 		//redecide dependencies
-		for (auto i : Indices) {
-			unsigned CurrentIndex = GetIndex(i.column, i.row);
+		for (auto i : Indices) { // i is a single index
+			if (i.type() == Value::type::Index) {
+				unsigned CurrentIndex = GetIndex(i.ind().column, i.ind().row);
 
-			if (SearchSelfRef(SetIndex, CurrentIndex)) {
-				return SET_CELL_ERR_CIRCULAR_REF;
+				if (SearchSelfRef(SetIndex, CurrentIndex)) {
+					return SET_CELL_ERR_CIRCULAR_REF;
+				}
+
+				_GetCellRef(CurrentIndex).affecton.insert(SetIndex); //this part used to use the _GetCellRef with column and row params. I forget why I did that...
+				ToSet.affectby.insert(CurrentIndex);
 			}
+			else { //i is an index range
+				for (unsigned j = i.indrange().column1; j <= i.indrange().column2; j++) {
+					for (unsigned k = i.indrange().row1; k <= i.indrange().row2; k++) {
+						unsigned CurrentIndex = GetIndex(j, k);
 
-			_GetCellRef(i.column, i.row).affecton.insert(SetIndex);
-			ToSet.affectby.insert(CurrentIndex);
+						if (SearchSelfRef(SetIndex, CurrentIndex)) {
+							return SET_CELL_ERR_CIRCULAR_REF;
+						}
+
+						_GetCellRef(CurrentIndex).affecton.insert(SetIndex);
+						ToSet.affectby.insert(CurrentIndex);
+					}
+				}
+			}
 
 		}
 

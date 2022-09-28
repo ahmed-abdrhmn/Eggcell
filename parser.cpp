@@ -467,19 +467,12 @@ end:
 	return tokens;
 };
 
-std::vector<Index> extractIndicesFromIR(const std::vector<Token>& IRparam) {
+std::vector<Value> extractIndicesFromIR(const std::vector<Token>& IRparam) {
 	const Token* tptr = &IRparam.front();
-	std::vector<Index> toret;
+	std::vector<Value> toret;
 	while (tptr->type != Token::type::null && tptr->type != Token::type::err) {
-		if (tptr->isindex()) {
-			toret.push_back(tptr->index());
-		}
-		else if (tptr->isindexrange()) { //get every index within the range
-			for (unsigned i = tptr->indexrange().column1; i <= tptr->indexrange().column2; i++) {
-				for (unsigned j = tptr->indexrange().row1; j <= tptr->indexrange().row2; j++) {
-					toret.push_back(Index{ i,j });
-				}
-			}
+		if (tptr->isindex() || tptr->isindexrange()) {
+			toret.push_back(tptr->lit);
 		}
 		tptr++;
 	}

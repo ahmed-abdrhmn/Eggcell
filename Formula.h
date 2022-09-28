@@ -100,5 +100,5 @@ struct Token {
 };
 
 std::vector<Token> genIR(const std::wstring& input);
-std::vector<Index> extractIndicesFromIR(const std::vector<Token>& IRparam);
+std::vector<Value> extractIndicesFromIR(const std::vector<Token>& IRparam); //returns a vector of values that are either index or index ranges
 Value evalIR(const std::vector<Token>& RPN, Value(&)(const Value&));
