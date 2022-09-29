@@ -206,41 +206,7 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 
 			//apply the vertical scroll
 			ScrollWindow(windowhandle, 0, vsi.nPos - vsi.nTrackPos, NULL, &clientarea);
-			clientarea.top -= columnheaderwidth;
 			
-			unsigned rowind = 0;
-			int ypos = 0;
-			while (ypos < clientarea.bottom + vsi.nTrackPos - columnheaderwidth) {
-				ypos += rowwidth[rowind];
-				rowind++;
-			}
-
-			const unsigned digitwidth = 14; //width in pixel to be added per digit
-			unsigned newrowheaderwidth = (35 - digitwidth) + digitwidth*(unsigned)log10((double)rowind); //compute what is supposed to be the width of the row header currently
-
-			if(newrowheaderwidth != rowheaderwidth){
-				const int scrollamt = newrowheaderwidth - rowheaderwidth;
-				rowheaderwidth = newrowheaderwidth;
-
-				SCROLLINFO hsi;
-				hsi.cbSize = sizeof(hsi);
-				hsi.fMask = SIF_PAGE;
-				//decrease the size of the page horizontally
-				GetScrollInfo(windowhandle, SB_HORZ, &hsi);
-				hsi.nPage -= scrollamt;
-				SetScrollInfo(windowhandle, SB_HORZ, &hsi,TRUE);
-
-				InvalidateRect(windowhandle, &clientarea, FALSE);
-				//move edit Control if exsists
-				if (EditWindow) {
-					RECT er; GetWindowRect(EditWindow, &er);
-					MapWindowPoints(HWND_DESKTOP, windowhandle, (LPPOINT)&er, 2); //appearantly GetWindowRect returns coordiates of window in desktop space
-					er.left += scrollamt;
-					er.right += scrollamt;
-					MoveWindow(EditWindow, er.left, er.top, er.right - er.left, er.bottom - er.top, FALSE);
-				}
-			}
-
 			vsi.nPos = vsi.nTrackPos; //Update Scroll Position
 			SetScrollInfo(windowhandle, SB_VERT, &vsi, TRUE);
 		}
@@ -296,13 +262,51 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 		RECT clientarea;
 		GetClientRect(windowhandle, &clientarea);
 		
-		
 		SCROLLINFO vsi; //vertical scroll info
 		SCROLLINFO hsi; //horizontal scroll info
 		vsi.cbSize = sizeof(vsi);											hsi.cbSize = sizeof(hsi);
 		vsi.fMask = SIF_POS;												hsi.fMask = SIF_POS;
 		GetScrollInfo(windowhandle, SB_VERT, &vsi);			GetScrollInfo(windowhandle, SB_HORZ, &hsi);
+		
+		/*Handling the resizing of the row header based on scrolling*/
+		{
+			unsigned rowind = 0;
+			int ypos = 0;
+			while (ypos < clientarea.bottom + vsi.nPos - columnheaderwidth) {
+				ypos += rowwidth[rowind];
+				rowind++;
+			}
 
+			const unsigned digitwidth = 14; //width in pixel to be added per digit
+			unsigned newrowheaderwidth = (35 - digitwidth) + digitwidth * (unsigned)log10((double)rowind); //compute what is supposed to be the width of the row header currently
+
+			if (newrowheaderwidth != rowheaderwidth) {
+				const int scrollamt = newrowheaderwidth - rowheaderwidth;
+				rowheaderwidth = newrowheaderwidth;
+
+				//decrease the size of the page horizontally
+				hsi.fMask = SIF_PAGE;
+				GetScrollInfo(windowhandle, SB_HORZ, &hsi);
+				hsi.nPage -= scrollamt;
+				SetScrollInfo(windowhandle, SB_HORZ, &hsi, TRUE);
+
+				//basically make it so the entire screen is redrawn
+				InvalidateRect(windowhandle, &clientarea, TRUE); //not sure why TRUE is needed here...
+				updaterect = clientarea;
+				EndPaint(windowhandle, &pts); //I am not sure if there is another way to do this without the end begin pair
+				BeginPaint(windowhandle, &pts);
+
+				//move edit Control if exsists
+				if (EditWindow) {
+					RECT er; GetWindowRect(EditWindow, &er);
+					MapWindowPoints(HWND_DESKTOP, windowhandle, (LPPOINT)&er, 2); //appearantly GetWindowRect returns coordiates of window in screen space so must convert to client space
+					er.left += scrollamt;
+					er.right += scrollamt;
+					MoveWindow(EditWindow, er.left, er.top, er.right - er.left, er.bottom - er.top, FALSE);
+				}
+			}
+
+		}
 		/*Drawing The text in cells*/
 		{
 			unsigned minXi = 0, minYi = 0; //indexes
@@ -520,8 +524,8 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 						SetCapture(windowhandle);
 						const int LineX = Xpos - hsi.nPos + rowheaderwidth; //X position in client space
 						dragindex = Xind;
-						initdragpos = LineX;
-						prevdragpos = LineX;
+						initdragpos = Xpos;
+						prevdragpos = Xpos;
 						HDC devicecontext = GetDC(windowhandle);
 						BitBlt(devicecontext, LineX, 0, 2, clientrect.bottom, devicecontext, LineX, 0, NOTSRCCOPY);
 						ReleaseDC(windowhandle, devicecontext);
@@ -545,8 +549,8 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 						SetCapture(windowhandle);
 						const int LineY = Ypos - vsi.nPos + columnheaderwidth; //Y position in client space
 						dragindex = Yind;
-						initdragpos = LineY;
-						prevdragpos = LineY;
+						initdragpos = Ypos;
+						prevdragpos = Ypos;
 						HDC devicecontext = GetDC(windowhandle);
 						BitBlt(devicecontext, 0, LineY, clientrect.right, 2, devicecontext, 0, LineY, NOTSRCCOPY);
 						ReleaseDC(windowhandle, devicecontext);
@@ -584,7 +588,7 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 		unsigned SetCellInfo = OneWkst.SetCell(Buffer, EditX, EditY);
 
 		if (SetCellInfo == SET_CELL_ERR_CIRCULAR_REF) { //Set Cell fails
-			MessageBoxW(NULL, L"The cell directly or indirectly refrences itself in the formula", L"Self Reference", MB_OK | MB_ICONERROR);
+			MessageBoxW(windowhandle, L"The cell directly or indirectly refrences itself in the formula", L"Self Reference", MB_OK | MB_ICONERROR);
 			SetFocus(editctrl);
 		}
 		else { //Set Cell Succeedes
@@ -621,21 +625,39 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 		RECT clientrect; GetClientRect(windowhandle, &clientrect);
 		if (dragmode == horz) {
 			mx = GET_X_LPARAM(lparam);//mousex
-			if (mx < initdragpos - columnwidth[dragindex] + clickrange) mx = initdragpos - columnwidth[dragindex] + clickrange; //so that the line isnt drawn at the area which has the row/column header
+			
+			SCROLLINFO hsi; //vertical scroll info
+			hsi.cbSize = sizeof(hsi);
+			hsi.fMask = SIF_POS;
+			GetScrollInfo(windowhandle, SB_HORZ, &hsi);
+
+			int csinitdragpos = initdragpos - hsi.nPos + rowheaderwidth; //init drag pos in client space
+			int csprevdragpos = prevdragpos - hsi.nPos + rowheaderwidth; //prev drag pos in client space
+			
+			if (mx < csinitdragpos - columnwidth[dragindex] + clickrange) mx = csinitdragpos - columnwidth[dragindex] + clickrange; //so that the line isnt drawn at the area which has the row/column header
 			HDC devicecontext = GetDC(windowhandle);
-			BitBlt(devicecontext, prevdragpos, 0, 2, clientrect.bottom, devicecontext, prevdragpos, 0, NOTSRCCOPY); //erase previous position
+			BitBlt(devicecontext, csprevdragpos, 0, 2, clientrect.bottom, devicecontext, csprevdragpos, 0, NOTSRCCOPY); //erase previous position
 			BitBlt(devicecontext, mx, 0, 2, clientrect.bottom, devicecontext, mx, 0, NOTSRCCOPY); //draw at current position
 			ReleaseDC(windowhandle, devicecontext);
-			prevdragpos = mx;
+			prevdragpos = mx + hsi.nPos - rowheaderwidth;
 		}
 		else if (dragmode == vert) {
 			my = GET_Y_LPARAM(lparam);//mousey
-			if (my < initdragpos - rowwidth[dragindex] + clickrange) my = initdragpos - rowwidth[dragindex] + clickrange; //so that the line isnt drawn at the area which has the row/column header
+			
+			SCROLLINFO vsi; //vertical scroll info
+			vsi.cbSize = sizeof(vsi);
+			vsi.fMask = SIF_POS;
+			GetScrollInfo(windowhandle, SB_VERT, &vsi);
+			
+			int csinitdragpos = initdragpos - vsi.nPos + columnheaderwidth; //init drag pos in client space
+			int csprevdragpos = prevdragpos - vsi.nPos + columnheaderwidth; //prev drag pos in client space
+
+			if (my < csinitdragpos - rowwidth[dragindex] + clickrange) my = csinitdragpos - rowwidth[dragindex] + clickrange; //so that the line isnt drawn at the area which has the row/column header
 			HDC devicecontext = GetDC(windowhandle);
-			BitBlt(devicecontext, 0, prevdragpos, clientrect.right, 2, devicecontext, 0, prevdragpos, NOTSRCCOPY); //erase previous position
+			BitBlt(devicecontext, 0, csprevdragpos, clientrect.right, 2, devicecontext, 0, csprevdragpos, NOTSRCCOPY); //erase previous position
 			BitBlt(devicecontext, 0, my, clientrect.right, 2, devicecontext, 0, my, NOTSRCCOPY);  //draw at current position
 			ReleaseDC(windowhandle, devicecontext);
-			prevdragpos = my;
+			prevdragpos = my + vsi.nPos - columnheaderwidth;
 		}
 		break;
 	}
@@ -655,7 +677,9 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 			SetScrollInfo(windowhandle, SB_HORZ, &hsi, TRUE);
 			
 			if (hsi.nPos < hsi.nMax - (int)hsi.nPage) { //checks if the scroll position is less than the maximum after the the scroll info is changed 
-				clientrect.left = initdragpos - columnwidth[dragindex]; //only invalidate to the right of changed cell
+				hsi.fMask = SIF_POS; //take into account the fact that vertical scroll postion might change after resizing the cell
+				GetScrollInfo(windowhandle, SB_HORZ, &hsi);
+				clientrect.left = (initdragpos - hsi.nPos + rowheaderwidth) - columnwidth[dragindex]; //only invalidate to the right of changed cell
 			}
 			else {
 				clientrect.left = rowheaderwidth; //invalidate whole grid area except row header
@@ -677,7 +701,9 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 			SetScrollInfo(windowhandle, SB_VERT, &vsi, TRUE);
 			
 			if (vsi.nPos < vsi.nMax - (int)vsi.nPage) { //checks if the scroll position is less than the maximum after the the scroll info is changed 
-				clientrect.top = initdragpos - rowwidth[dragindex]; //only invalidate to the bottom of changed cell
+				vsi.fMask = SIF_POS; //take into account the fact that vertical scroll postion might change after resizing the cell
+				GetScrollInfo(windowhandle, SB_VERT, &vsi);
+				clientrect.top = (initdragpos - vsi.nPos + columnheaderwidth) - rowwidth[dragindex]; //only invalidate to the bottom of changed cell
 			}
 			else {
 				clientrect.top = columnheaderwidth; //invalidate whole grid area except column header
