@@ -204,11 +204,39 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 				vsi.nTrackPos = 0;
 			}
 
+			//before applying the vertical scroll, erase the drag line, if it exits
+			SCROLLINFO hsi;
+			hsi.cbSize = sizeof(hsi);
+			hsi.fMask = SIF_POS;
+			GetScrollInfo(windowhandle, SB_HORZ, &hsi);
+
+			HDC dc = GetDC(windowhandle);
+			if (dragmode == vert) {
+				int csprevdragpos = prevdragpos - vsi.nPos + columnheaderwidth;
+				BitBlt(dc, 0, csprevdragpos, clientarea.right, 2, dc, 0, csprevdragpos, NOTSRCCOPY);
+			}
+			else if (dragmode == horz) {
+				int csprevdragpos = prevdragpos - hsi.nPos + rowheaderwidth;
+				BitBlt(dc, csprevdragpos, 0, 2, clientarea.bottom, dc, csprevdragpos, 0, NOTSRCCOPY);
+			}
+			
 			//apply the vertical scroll
 			ScrollWindow(windowhandle, 0, vsi.nPos - vsi.nTrackPos, NULL, &clientarea);
 			
 			vsi.nPos = vsi.nTrackPos; //Update Scroll Position
 			SetScrollInfo(windowhandle, SB_VERT, &vsi, TRUE);
+
+			//now draw the drag line again
+			if (dragmode == vert) {
+				int csprevdragpos = prevdragpos - vsi.nPos + columnheaderwidth;
+				BitBlt(dc, 0, csprevdragpos, clientarea.right, 2, dc, 0, csprevdragpos, NOTSRCCOPY);
+			}
+			else if (dragmode == horz) {
+				int csprevdragpos = prevdragpos - hsi.nPos + rowheaderwidth;
+				BitBlt(dc, csprevdragpos, 0, 2, clientarea.bottom, dc, csprevdragpos, 0, NOTSRCCOPY);
+			}
+			ReleaseDC(windowhandle, dc);
+
 		}
 		break;
 	}
@@ -246,19 +274,42 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 				hsi.nTrackPos = 0;
 			}
 
+			//before applying the vertical scroll, erase the drag line, if it exits
+			SCROLLINFO vsi;
+			vsi.cbSize = sizeof(vsi);
+			vsi.fMask = SIF_POS;
+			GetScrollInfo(windowhandle, SB_VERT, &vsi);
+
+			HDC dc = GetDC(windowhandle);
+			if (dragmode == vert) {
+				int csprevdragpos = prevdragpos - vsi.nPos + columnheaderwidth;
+				BitBlt(dc, 0, csprevdragpos, clientarea.right, 2, dc, 0, csprevdragpos, NOTSRCCOPY);
+			}
+			else if (dragmode == horz) {
+				int csprevdragpos = prevdragpos - hsi.nPos + rowheaderwidth;
+				BitBlt(dc, csprevdragpos, 0, 2, clientarea.bottom, dc, csprevdragpos, 0, NOTSRCCOPY);
+			}
+			
+			//apply the horizontal scroll
 			ScrollWindow(windowhandle, hsi.nPos - hsi.nTrackPos, 0 , NULL, &clientarea);
 
 			hsi.nPos = hsi.nTrackPos; //Update Scroll Position
 			SetScrollInfo(windowhandle, SB_HORZ, &hsi, TRUE);
+
+			//now draw the drag line again
+			if (dragmode == vert) {
+				int csprevdragpos = prevdragpos - vsi.nPos + columnheaderwidth;
+				BitBlt(dc, 0, csprevdragpos, clientarea.right, 2, dc, 0, csprevdragpos, NOTSRCCOPY);
+			}
+			else if (dragmode == horz) {
+				int csprevdragpos = prevdragpos - hsi.nPos + rowheaderwidth;
+				BitBlt(dc, csprevdragpos, 0, 2, clientarea.bottom, dc, csprevdragpos, 0, NOTSRCCOPY);
+			}
+			ReleaseDC(windowhandle, dc);
 		}
 		break;
 	}
-	case WM_PAINT: {
-		PAINTSTRUCT pts;
-
-		HDC PaintDC = BeginPaint(windowhandle, &pts);
-		RECT updaterect = pts.rcPaint;
-		
+	case WM_PAINT: {	
 		RECT clientarea;
 		GetClientRect(windowhandle, &clientarea);
 		
@@ -291,10 +342,7 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 				SetScrollInfo(windowhandle, SB_HORZ, &hsi, TRUE);
 
 				//basically make it so the entire screen is redrawn
-				InvalidateRect(windowhandle, &clientarea, TRUE); //not sure why TRUE is needed here...
-				updaterect = clientarea;
-				EndPaint(windowhandle, &pts); //I am not sure if there is another way to do this without the end begin pair
-				BeginPaint(windowhandle, &pts);
+				InvalidateRect(windowhandle, NULL, TRUE); //not sure why TRUE is needed here...
 
 				//move edit Control if exsists
 				if (EditWindow) {
@@ -307,6 +355,12 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 			}
 
 		}
+		
+		/*Officially Begin Painting*/
+		PAINTSTRUCT pts;
+		HDC PaintDC = BeginPaint(windowhandle, &pts);
+		RECT updaterect = pts.rcPaint;
+
 		/*Drawing The text in cells*/
 		{
 			unsigned minXi = 0, minYi = 0; //indexes
@@ -429,7 +483,17 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 		}
 		DeleteObject(headerbrush);
 
-		
+		/*draw drag line if exists*/
+		{
+			if (dragmode == vert) {
+				int csprevdragpos = prevdragpos - vsi.nPos + columnheaderwidth;
+				BitBlt(PaintDC, 0, csprevdragpos, clientarea.right, 2, PaintDC, 0, csprevdragpos, NOTSRCCOPY);
+			}
+			else if (dragmode == horz) {
+				int csprevdragpos = prevdragpos - hsi.nPos + rowheaderwidth;
+				BitBlt(PaintDC, csprevdragpos, 0, 2, clientarea.bottom, PaintDC, csprevdragpos, 0, NOTSRCCOPY);
+			}
+		}
 
 		EndPaint(windowhandle, &pts);
 		break;
