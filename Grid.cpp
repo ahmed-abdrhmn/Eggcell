@@ -27,6 +27,16 @@ static int initdragpos;
 static int prevdragpos;
 const int clickrange = 4; //range of position before or after line where click would detect
 
+static bool rangedrag;
+static int initX; //initial drag position and index in worksheet space
+static int initY;
+static int initXpos;
+static int initYpos;
+static int prevX1; //previous position of drag square in screen space, used for erasing
+static int prevX2;
+static int prevY1;
+static int prevY2;
+
 static unsigned short rowwidth[sheetheight];
 static unsigned short columnwidth[sheetwidth];
 static int rowheaderwidth = 35;
@@ -101,6 +111,17 @@ WCHAR* IndToCol(unsigned column) {
 	return Buffer;
 }
 
+void InvertRect(HDC dc, int x1, int y1, int x2, int y2) {
+	const int t = 4; //thickness
+	const int o = 4; //offset
+	BitBlt(dc, x1 - o, y1    , t              , y2 - y1    , dc, x1 - o, y1    , NOTSRCCOPY); //left edge
+	BitBlt(dc, x1 - o, y1 - o, x2 - x1 + o + o, t          , dc, x1 - o, y1 - o, NOTSRCCOPY); //top edge
+	BitBlt(dc, x1 - o, y2    , x2 - x1 + o + o, t          , dc, x1 - o, y2    , NOTSRCCOPY); //bottom edge
+	BitBlt(dc, x2    , y1    , t              , y2 - y1    , dc, x2    , y1    , NOTSRCCOPY); //right edge
+
+	//note: we have to make sure that these edge not overlap but also completely surround the square to not have gaps in the corners
+}
+
 
 LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM lparam) {
 
@@ -109,6 +130,7 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 	switch (msg) {
 	case WM_CREATE: {
 		dragmode = none;
+		rangedrag = false;
 		for (unsigned i = 0; i < sizeof(rowwidth) / sizeof(unsigned short); i++) {
 			rowwidth[i] = 35;
 		}
@@ -219,6 +241,9 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 				int csprevdragpos = prevdragpos - hsi.nPos + rowheaderwidth;
 				BitBlt(dc, csprevdragpos, 0, 2, clientarea.bottom, dc, csprevdragpos, 0, NOTSRCCOPY);
 			}
+			else if (rangedrag == true) {
+				InvertRect(dc, prevX1, prevY1, prevX2, prevY2);
+			}
 			
 			//apply the vertical scroll
 			ScrollWindow(windowhandle, 0, vsi.nPos - vsi.nTrackPos, NULL, &clientarea);
@@ -235,7 +260,17 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 				int csprevdragpos = prevdragpos - hsi.nPos + rowheaderwidth;
 				BitBlt(dc, csprevdragpos, 0, 2, clientarea.bottom, dc, csprevdragpos, 0, NOTSRCCOPY);
 			}
+			else if (rangedrag == true) {
+				InvertRect(dc, prevX1, prevY1, prevX2, prevY2);
+			}
 			ReleaseDC(windowhandle, dc);
+			
+			if(dragmode != none || rangedrag == true){ //update the "position" of the cursor if the anything is being draged
+				POINT p;
+				GetCursorPos(&p);
+				MapWindowPoints(NULL, windowhandle, &p, 1);
+				PostMessageW(windowhandle, WM_MOUSEMOVE, NULL, (p.y << 16) | p.x);
+			}
 
 		}
 		break;
@@ -289,6 +324,9 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 				int csprevdragpos = prevdragpos - hsi.nPos + rowheaderwidth;
 				BitBlt(dc, csprevdragpos, 0, 2, clientarea.bottom, dc, csprevdragpos, 0, NOTSRCCOPY);
 			}
+			else if (rangedrag == true) {
+				InvertRect(dc, prevX1, prevY1, prevX2, prevY2);
+			}
 			
 			//apply the horizontal scroll
 			ScrollWindow(windowhandle, hsi.nPos - hsi.nTrackPos, 0 , NULL, &clientarea);
@@ -305,7 +343,17 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 				int csprevdragpos = prevdragpos - hsi.nPos + rowheaderwidth;
 				BitBlt(dc, csprevdragpos, 0, 2, clientarea.bottom, dc, csprevdragpos, 0, NOTSRCCOPY);
 			}
+			else if (rangedrag == true) {
+				InvertRect(dc, prevX1, prevY1, prevX2, prevY2);
+			}
 			ReleaseDC(windowhandle, dc);
+			
+			if(dragmode != none || rangedrag == true){ //update the "position" of the cursor if the anything is being draged
+				POINT p;
+				GetCursorPos(&p);
+				MapWindowPoints(NULL, windowhandle, &p, 1);
+				PostMessageW(windowhandle, WM_MOUSEMOVE, NULL, (p.y << 16) | p.x);
+			}
 		}
 		break;
 	}
@@ -493,6 +541,9 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 				int csprevdragpos = prevdragpos - hsi.nPos + rowheaderwidth;
 				BitBlt(PaintDC, csprevdragpos, 0, 2, clientarea.bottom, PaintDC, csprevdragpos, 0, NOTSRCCOPY);
 			}
+			else if (rangedrag == true) {
+				InvertRect(PaintDC, prevX1, prevY1, prevX2, prevY2);
+			}
 		}
 
 		EndPaint(windowhandle, &pts);
@@ -526,52 +577,73 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 			tofill = { Xpos + 1,Ypos + 1,Xpos + columnwidth[Xind] - 1,Ypos + rowwidth[Yind] - 1 };
 		}
 		
-		WCHAR* Buffer = new WCHAR[GetWindowTextLengthW(EditWindow) + (size_t)1/*null terminator*/];
-		if (!Buffer) MessageBoxA(NULL, "Allocation Failure", "Allocation Failure", MB_ICONERROR);
-		unsigned index;
+		WCHAR* WindowContent = new WCHAR[GetWindowTextLengthW(EditWindow) + (size_t)1/*null terminator*/];
+		if (!WindowContent) MessageBoxA(NULL, "Allocation Failure", "Allocation Failure", MB_ICONERROR);
+		if (EditWindow != NULL) { GetWindowTextW(EditWindow, WindowContent, INT_MAX); }
 
-		if ((EditWindow == NULL || (index = GetWindowTextW(EditWindow, Buffer, INT_MAX), *Buffer != L'=')) && clickedwithingrid) {
+		if (clickedwithingrid) {			
+			unsigned start;
+			unsigned end;
+			SendMessageW(EditWindow, EM_GETSEL, (WPARAM)&start, (LPARAM)&end);
+			start = std::min(start, end);
 
-			if (EditWindow != NULL) { //apply and destroy old window if there exists an edit window;
-				(void)OneWkst.SetCell(Buffer, EditX, EditY);
-				RECT clientrect; GetClientRect(windowhandle, &clientrect);
-				clientrect.top += columnheaderwidth;
-				clientrect.left += rowheaderwidth;
-				InvalidateRect(windowhandle, &clientrect, TRUE);
-				DestroyWindow(EditWindow);
+			if ((EditWindow == NULL || WindowContent[0] != L'=' || start == 0)) {
+				if (EditWindow != NULL) { //apply and destroy old window if there exists an edit window;
+					(void)OneWkst.SetCell(WindowContent, EditX, EditY);
+					RECT clientrect; GetClientRect(windowhandle, &clientrect);
+					clientrect.top += columnheaderwidth;
+					clientrect.left += rowheaderwidth;
+					InvalidateRect(windowhandle, &clientrect, TRUE);
+					DestroyWindow(EditWindow);
+				}
+
+				HWND editctrl = CreateWindowW(L"EDIT", L"Enter Text",
+					WS_CHILD | WS_VISIBLE | ES_LEFT | ES_AUTOHSCROLL,
+					tofill.left, tofill.top, tofill.right - tofill.left, tofill.bottom - tofill.top,
+					windowhandle, (HMENU)0,
+					(HINSTANCE)GetWindowLongPtrW(windowhandle, GWLP_HINSTANCE), NULL);
+
+				oldeditproc = (WNDPROC)SetWindowLongPtrW(editctrl, GWLP_WNDPROC, (LONG_PTR)editproc);
+				EditWindow = editctrl;
+				EditX = Xind;
+				EditY = Yind;
+
+				SetWindowTextW(editctrl, OneWkst.GetCell(Xind, Yind).ExactInput.c_str());
+				SetFocus(editctrl);
+				SendMessageW(editctrl, WM_SETFONT, (WPARAM)spFont, TRUE);
 			}
+			else {
+				unsigned Start;
+				unsigned End;
+				SendMessageW(EditWindow, EM_GETSEL, (WPARAM)&Start,(LPARAM)&End);
+				Start = std::min(Start, End);
 
-			HWND editctrl = CreateWindowW(L"EDIT", L"Enter Text",
-				WS_CHILD | WS_VISIBLE | ES_LEFT | ES_AUTOHSCROLL,
-				tofill.left, tofill.top, tofill.right - tofill.left, tofill.bottom - tofill.top,
-				windowhandle, (HMENU)0,
-				(HINSTANCE)GetWindowLongPtrW(windowhandle, GWLP_HINSTANCE), NULL);
+				initX = Xind;
+				initY = Yind;
+				initXpos = Xpos + hsi.nPos - rowheaderwidth; //should convert to worksheet space
+				initYpos = Ypos + vsi.nPos - columnheaderwidth;
+				rangedrag = true;
+				//Draw rectangle and set the prev coords
+				prevX1 = Xpos;
+				prevY1 = Ypos;
+				prevX2 = Xpos + columnwidth[Xind];
+				prevY2 = Ypos + rowwidth[Yind];
 
-			oldeditproc = (WNDPROC)SetWindowLongPtrW(editctrl, GWLP_WNDPROC, (LONG_PTR)editproc);
-			EditWindow = editctrl;
-			EditX = Xind;
-			EditY = Yind;
+				HDC dc = GetDC(windowhandle);
+				InvertRect(dc, prevX1, prevY1, prevX2, prevY2);
+				ReleaseDC(windowhandle, dc);
 
-			SetWindowTextW(editctrl, OneWkst.GetCell(Xind, Yind).ExactInput.c_str());
-			SetFocus(editctrl);
-			SendMessageW(editctrl, WM_SETFONT, (WPARAM)spFont, TRUE);
-		}
-		else if(clickedwithingrid){
-			unsigned Start;
-			unsigned End;
-			SendMessageW(EditWindow, EM_GETSEL, (WPARAM)&Start,(LPARAM)&End);
-			Start = std::min(Start, End);
-
-			WCHAR* strptr = IndToCol(Xind,Yind);
-			SendMessageW(EditWindow, EM_REPLACESEL, FALSE, (LPARAM)strptr);
-			SendMessageW(EditWindow, EM_SETSEL, Start, Start + std::wcslen(strptr));
-			updateselect = true;
-			delete[] strptr;
+				WCHAR* strptr = IndToCol(Xind,Yind);
+				SendMessageW(EditWindow, EM_REPLACESEL, FALSE, (LPARAM)strptr);
+				SendMessageW(EditWindow, EM_SETSEL, Start, Start + std::wcslen(strptr));
+				updateselect = true;
+				delete[] strptr;
+			}
 		}
 		else {
 			RECT clientrect; GetClientRect(windowhandle, &clientrect);
 			if (EditWindow != NULL) { //apply edit if exist
-				(void)OneWkst.SetCell(Buffer, EditX, EditY);
+				(void)OneWkst.SetCell(WindowContent, EditX, EditY);
 				clientrect.top += columnheaderwidth;
 				clientrect.left += rowheaderwidth;
 				InvalidateRect(windowhandle, &clientrect, TRUE);
@@ -629,8 +701,7 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 			}
 			
 		}
-		
-		if(Buffer)delete[] Buffer;
+		if (WindowContent)delete[] WindowContent;
 		break;
 	}
 	case WM_EDITENTER: {
@@ -723,6 +794,77 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 			ReleaseDC(windowhandle, devicecontext);
 			prevdragpos = my + vsi.nPos - columnheaderwidth;
 		}
+		else if (rangedrag == true) {
+			//note: if rangedrag is true then there is no need to check of EditWindow since.
+			mx = GET_X_LPARAM(lparam); //mouse x
+			my = GET_Y_LPARAM(lparam); //mouse y
+
+			SCROLLINFO vsi; //vertical scroll info
+			SCROLLINFO hsi; //horizontal scroll info
+			vsi.cbSize = sizeof(vsi);							hsi.cbSize = sizeof(hsi);
+			vsi.fMask = SIF_POS;								hsi.fMask = SIF_POS;
+			GetScrollInfo(windowhandle, SB_VERT, &vsi);			GetScrollInfo(windowhandle, SB_HORZ, &hsi);
+
+			int Xind = 0, Yind = 0, Xpos = 0, Ypos = 0;
+			while (Xpos + columnwidth[Xind] < mx + hsi.nPos - rowheaderwidth) {
+				Xpos += columnwidth[Xind];
+				Xind++;
+			}
+			Xpos -= hsi.nPos - rowheaderwidth; //convert to client space
+
+			while (Ypos + rowwidth[Yind] < my + vsi.nPos - columnheaderwidth) {
+				Ypos += rowwidth[Yind];
+				Yind++;
+			}
+			Ypos -= vsi.nPos - columnheaderwidth; //convert to client space
+
+			//begin handling blitting stuff
+			HDC dc = GetDC(windowhandle);
+			InvertRect(dc, prevX1, prevY1, prevX2, prevY2); //erase
+
+			int csinitXpos = initXpos - hsi.nPos + rowheaderwidth;
+			int csinitYpos = initYpos - vsi.nPos + columnheaderwidth;
+
+			prevX1 = std::min(csinitXpos, Xpos);
+			prevY1 = std::min(csinitYpos, Ypos);
+			prevX2 = std::max(csinitXpos + columnwidth[initX], Xpos + columnwidth[Xind]);
+			prevY2 = std::max(csinitYpos + rowwidth[initY], Ypos + rowwidth[Yind]);
+
+			InvertRect(dc, prevX1, prevY1, prevX2, prevY2); //draw
+			ReleaseDC(windowhandle, dc);
+			//end handling blitting stuff
+
+			unsigned Start;
+			unsigned End;
+			SendMessageW(EditWindow, EM_GETSEL, (WPARAM)&Start, (LPARAM)&End);
+			Start = std::min(Start, End);
+
+			if (Xind == initX && Yind == initY) {
+				WCHAR* strptr = IndToCol(Xind, Yind);
+				
+				SendMessageW(EditWindow, EM_REPLACESEL, FALSE, (LPARAM)strptr);
+				SendMessageW(EditWindow, EM_SETSEL, Start, Start + std::wcslen(strptr));
+				
+				delete[] strptr;
+			}
+			else {
+				WCHAR* strptr1 = IndToCol(initX, initY);
+				WCHAR* strptr2 = IndToCol(Xind, Yind);
+				WCHAR* strptrc = new WCHAR[128];
+
+				wcscpy_s(strptrc, 128, strptr1);
+				wcscat_s(strptrc, 128, L":");
+				wcscat_s(strptrc, 128, strptr2);
+
+				SendMessageW(EditWindow, EM_REPLACESEL, FALSE, (LPARAM)strptrc);
+				SendMessageW(EditWindow, EM_SETSEL, Start, Start + std::wcslen(strptrc));
+				
+				delete[] strptr1;
+				delete[] strptr2;
+				delete[] strptrc;
+			}
+
+		}
 		break;
 	}
 	case WM_LBUTTONUP: {
@@ -774,6 +916,12 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 			}
 			rowwidth[dragindex] += sizechange;
 			InvalidateRect(windowhandle, &clientrect, TRUE);
+		}
+		else if (rangedrag == true) {
+			HDC dc = GetDC(windowhandle);
+			InvertRect(dc, prevX1, prevY1, prevX2, prevY2); //remove the drag rectangle
+			ReleaseDC(windowhandle, dc);
+			rangedrag = false;
 		}
 		break;
 	}
