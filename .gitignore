@@ -1,3 +1,9 @@
+#this is to ignore extensionless files
+*
+!/**/
+!*.*
+#other files
 x64
 Win32
 .vs
+Resource.aps

@@ -26,7 +26,7 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
-Fav                     ICON                    "Title Icon.ico"
+Fav                     ICON                    "Res\\Title Icon.ico"
 
 #endif    // English (United States) resources
 /////////////////////////////////////////////////////////////////////////////
@@ -80,7 +80,7 @@ LANGUAGE LANG_ARABIC, SUBLANG_ARABIC_SAUDI_ARABIA
 // Cursor
 //
 
-MyCursor_IDC            CURSOR                  "MyCursor.cur"
+MyCursor_IDC            CURSOR                  "Res\\MyCursor.cur"
 
 #endif    // Arabic (Saudi Arabia) resources
 /////////////////////////////////////////////////////////////////////////////

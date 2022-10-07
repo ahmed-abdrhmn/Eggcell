@@ -87,6 +87,9 @@ Value::~Value() {
 	if (_type == type::Text) {
 		_text.~basic_string();
 	}
+	else if (_type == type::ValueList) {
+		_valuelist.~vector();
+	}
 }
 
 Value Value::operator+(const Value& rhs) {
