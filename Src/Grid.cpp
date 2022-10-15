@@ -11,10 +11,10 @@
 
 const COLORREF headercolor = RGB(181,251,193);
 
-const int sheetwidth = 1024; //width of spreadsheet in cells
-const int sheetheight = 1024; //height of spreadsheet in cells
+const int sheetwidth = 32; //width of spreadsheet in cells
+const int sheetheight = 64; //height of spreadsheet in cells
 
-LRESULT CALLBACK editproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM lparam);
+static LRESULT CALLBACK editproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM lparam);
 static WNDPROC oldeditproc;
 static HWND EditWindow;
 static int EditX;
@@ -42,12 +42,22 @@ static unsigned short columnwidth[sheetwidth];
 static int rowheaderwidth = 35;
 static int columnheaderwidth = 35;
 
+struct MergedCell {
+	unsigned indX1;
+	unsigned indX2;
+	unsigned indY1;
+	unsigned indY2;
+	unsigned posX;
+	unsigned posY;
+};
 
-inline int CeilDiv(int n, int d) { //divison such that the ceiling of the quotient is returned (if numerator and denominator have the same sign)
+static std::vector<MergedCell> MergedCells;
+
+static inline int CeilDiv(int n, int d) { //divison such that the ceiling of the quotient is returned (if numerator and denominator have the same sign)
 	return ((n - 1) / d) + 1;
 }
 
-inline int FloorDiv(int n, int d) { //divison such that the floor of the quotient is returned (if numerator and denominator have the same sign)
+static inline int FloorDiv(int n, int d) { //divison such that the floor of the quotient is returned (if numerator and denominator have the same sign)
 	return n/d;
 }
 
@@ -55,7 +65,7 @@ static WorkSheet OneWkst;
 WorkSheet* WorkSheet::CurrentWorksheet = &OneWkst;
 
 
-WCHAR* IndToCol(unsigned column,unsigned row) {
+static WCHAR* IndToCol(unsigned column,unsigned row) {
 	column++; //convert from zero base to one base
 	const unsigned buffsize = 20;
 	WCHAR* Buffer = new WCHAR[buffsize];
@@ -86,7 +96,7 @@ WCHAR* IndToCol(unsigned column,unsigned row) {
 	return Buffer;
 }
 
-WCHAR* IndToCol(unsigned column) {
+static WCHAR* IndToCol(unsigned column) {
 	column++; //convert from zero base to one base
 	const size_t buffsize = 20;
 	WCHAR *Buffer = new WCHAR[buffsize];
@@ -111,7 +121,7 @@ WCHAR* IndToCol(unsigned column) {
 	return Buffer;
 }
 
-void InvertRect(HDC dc, int x1, int y1, int x2, int y2) {
+static void InvertRect(HDC dc, int x1, int y1, int x2, int y2) {
 	const int t = 4; //thickness
 	const int o = 4; //offset
 	BitBlt(dc, x1 - o, y1    , t              , y2 - y1    , dc, x1 - o, y1    , NOTSRCCOPY); //left edge
@@ -179,11 +189,23 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 		si.nMax = Totalheight;
 		si.nPage = clientarea.bottom - columnheaderwidth;
 		SetScrollInfo(windowhandle, SB_VERT, &si, TRUE);
+		
 		//Insert Placeholder data into spreadsheet
-
-		OneWkst.SetCell(L"Hello", 3, 0);
+		OneWkst.SetCell(L"Hello", 6, 0);
+		OneWkst.SetCell(L"This is a merged Cell", 7, 0);
 		OneWkst.SetCell(L"lalal", 8, 8);
 		OneWkst.SetCell(L"هلا بالخميس", 0, 0);
+		OneWkst.SetCell(L"Another Merged Cell!",0,20);
+		OneWkst.SetCell(L"Yet Another Merged Cell!", 0, 21);
+
+		//merge some cells
+		MergedCells.push_back(MergedCell{ 0,5,0,0 });
+		MergedCells.push_back(MergedCell{ 0,5,1,1 });
+		MergedCells.push_back(MergedCell{ 0,5,4,4 });
+		MergedCells.push_back(MergedCell{ 0,5,20,20 });
+		MergedCells.push_back(MergedCell{ 0,5,21,21 });
+		MergedCells.push_back(MergedCell{ 6,6,0,5 });
+		MergedCells.push_back(MergedCell{ 7,7,0,5 });
 
 		//Config Font
 		SelectObject(DeviceContext, spFont);
@@ -427,12 +449,95 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 
 			for (int Yp = minYp, Yi = minYi; Yp <= updaterect.bottom; Yp += rowwidth[Yi], Yi++) {
 				for (int Xp = minXp, Xi = minXi; Xp <= updaterect.right; Xp += columnwidth[Xi], Xi++) {
+					bool intersectmerge = false;
+					int Xi2;
+					int Yi2;
+					int Xp2;
+					int Yp2;
+					
+					for (auto i : MergedCells) {
+						if (i.indX1 <= Xi && Xi <= i.indX2 && i.indY1 <= Yi && Yi <= i.indY2) {
+							intersectmerge = true;
+							Xi2 = i.indX2;
+							Yi2 = i.indY2;
+							break;
+						}
+					}
+
 					WorkSheet::cell read = OneWkst.GetCell(Xi, Yi);
-					if (read.type != WorkSheet::cell::type::null) {
-						RECT cellRect = { Xp,Yp,Xp + columnwidth[Xi] ,Yp + rowwidth[Yi] };
+					
+					if (!intersectmerge) {
 						if (read.type != WorkSheet::cell::type::null) {
+							RECT cellRect = { Xp,Yp,Xp + columnwidth[Xi] ,Yp + rowwidth[Yi] };
 							DrawTextW(PaintDC, read.tt.c_str(), -1, &cellRect, DT_LEFT | DT_SINGLELINE | DT_BOTTOM);
 						}
+					}
+					else {
+						for (; Xi < Xi2; Xi++) { //horizontally skip the mergecell
+							Xp += columnwidth[Xi];
+						}
+					}
+				}
+			}
+
+			//draw the text to be displayed in merged cells
+			for (auto i : MergedCells) {
+				if (i.indX2 >= minXi && i.indY2 >= minYi) {
+					int trackX1p, trackX2p;
+					int trackY1p, trackY2p;
+					unsigned trackXi, trackYi;
+
+					//---Right---
+					trackX2p = minXp;
+					trackXi = minXi;
+					if (trackXi < i.indX2 + 1) {
+						while (trackXi != i.indX2 + 1) {
+							trackX2p += columnwidth[trackXi];
+							trackXi++;
+						}
+					}
+					else {
+						while (trackXi != i.indX2 + 1) {
+							trackX2p -= columnwidth[trackXi - 1];
+							trackXi--;
+						}
+					}
+
+					//---Left---
+					trackX1p = trackX2p;
+					while (trackXi > i.indX1) {
+						trackX1p -= columnwidth[trackXi - 1];
+						trackXi--;
+					}
+
+					//---Bottom---
+					trackY2p = minYp;
+					trackYi = minYi;
+					if (trackYi < i.indY2 + 1) {
+						while (trackYi != i.indY2 + 1) {
+							trackY2p += rowwidth[trackYi];
+							trackYi++;
+						}
+					}
+					else {
+						while (trackYi != i.indY2 + 1) {
+							trackY2p -= rowwidth[trackYi - 1];
+							trackYi--;
+						}
+					}
+
+					//---Top---
+					trackY1p = trackY2p;
+					while (trackYi > i.indY1) {
+						trackY1p -= rowwidth[trackYi - 1];
+						trackYi--;
+					}
+
+					//--Draw---
+					WorkSheet::cell read = OneWkst.GetCell(trackXi, trackYi);
+					if (read.type != WorkSheet::cell::type::null) {
+						RECT cellRect = { trackX1p, trackY1p, trackX2p, trackY2p };
+						DrawTextW(PaintDC, read.tt.c_str(), -1, &cellRect, DT_CENTER | DT_SINGLELINE | DT_BOTTOM);
 					}
 				}
 			}
@@ -470,12 +575,66 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 			FillRect(PaintDC, &headerarea, headerbrush);
 		}
 		/*drawing column headers*/{
+			int posY = 0;
+			int indY = 0;
+			while (posY + rowwidth[indY] < vsi.nPos) {
+				posY += rowwidth[indY];
+				indY++;
+			}
+			
 			int sumpos = columnwidth[0] + rowheaderwidth;
 			int index = 1;
 			while (sumpos <= hsi.nPos + clientarea.right && index < sheetwidth) {
 				if (sumpos - hsi.nPos >= rowheaderwidth) {
-					POINT ColHeaderSep[2] = { {sumpos - hsi.nPos,0},{sumpos - hsi.nPos,clientarea.bottom/*columnheaderwidth - 1*/} };
-					Polyline(PaintDC, ColHeaderSep, 2);
+					//Drawing the line
+					{
+						POINT ColHeaderSep[2] = { {sumpos - hsi.nPos,0},{sumpos - hsi.nPos,columnheaderwidth - 1} };
+						Polyline(PaintDC, ColHeaderSep, 2);
+					}
+					
+					std::vector<unsigned> intersect; /*Get list of Merged Cells that intersect*/
+					for (int i = 0; i < MergedCells.size(); i++) {
+						if (MergedCells[i].indX1 < (unsigned)index && (unsigned)index <= MergedCells[i].indX2) {
+							intersect.push_back(i);
+						}
+					}
+
+					//the following variables will be used to keep track while drawing the line
+					int currinkp = posY - vsi.nPos + columnheaderwidth; //in screen space
+					int previnkp = columnheaderwidth; //in screen space
+					unsigned int currinki = indY;
+					bool intersects = true; //redundant initialization
+					bool previntersects = false;
+					
+					while (true) {
+						if (currinkp < clientarea.bottom) { //this also checks for intersection at the bottom/right of the screen
+							intersects = false;
+							for (auto i : intersect) {
+								if (MergedCells[i].indY1 <= currinki && currinki <= MergedCells[i].indY2) {
+									intersects = true;
+									break;
+								}
+							}
+						}
+						else {
+							intersects = true;
+						}
+						
+						if (currinkp > columnheaderwidth) { //this check is done since currinkp begins ABOVE the column header, might be able to optimize this by making a version of the loop that only executes once before this one
+							if (!intersects && previntersects) { //the if else must execute in this order or else merged cells at the bottom of the screen will be drawn unmerged 😔
+								previnkp = currinkp;
+							}
+							else if (intersects && !previntersects) {
+								POINT ColHeaderSep[2] = { {sumpos - hsi.nPos,previnkp},{sumpos - hsi.nPos,currinkp} };
+								Polyline(PaintDC, ColHeaderSep, 2);
+							}
+						}
+
+						if (currinkp > clientarea.bottom) break;
+						currinkp += rowwidth[currinki];
+						currinki++;
+						previntersects = intersects;
+					}
 
 					if (updaterect.top < columnheaderwidth) { //only draw the column letters if they are in the update region
 						RECT TextRect = { sumpos - hsi.nPos - columnwidth[index - 1],0,sumpos - hsi.nPos,columnheaderwidth - 1 };
@@ -498,12 +657,66 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 
 		}
 		/*drawing row headers*/ {
+			int posX = 0;
+			int indX = 0;
+			while (posX + columnwidth[indX] < hsi.nPos) {
+				posX += columnwidth[indX];
+				indX++;
+			}
+			
 			int sumpos = rowwidth[0] + columnheaderwidth;
 			int index = 1;
 			while (sumpos <= vsi.nPos + clientarea.bottom && index < sheetheight) {
 				if (sumpos - vsi.nPos >= columnheaderwidth) {
-					POINT RowHeaderSep[2] = { {0,sumpos - vsi.nPos},{/*rowheaderwidth - 1*/ clientarea.right,sumpos - vsi.nPos} };
-					Polyline(PaintDC, RowHeaderSep, 2);
+					//Drawing the line
+					{
+						POINT ColHeaderSep[2] = { {0, sumpos - vsi.nPos},{rowheaderwidth - 1, sumpos - vsi.nPos} };
+						Polyline(PaintDC, ColHeaderSep, 2);
+					}
+
+					std::vector<unsigned> intersect; /*Get list of Merged Cells that intersect*/
+					for (int i = 0; i < MergedCells.size(); i++) {
+						if (MergedCells[i].indY1 < (unsigned)index && (unsigned)index <= MergedCells[i].indY2) {
+							intersect.push_back(i);
+						}
+					}
+
+					//the following variables will be used to keep track while drawing the line
+					int currinkp = posX - hsi.nPos + rowheaderwidth; //in screen space
+					int previnkp = rowheaderwidth - 1; //in screen space (for some reason the horizontal version needs the minus -1)
+					unsigned int currinki = indX;
+					bool intersects = true; //redundant initialization
+					bool previntersects = false;
+
+					while (true) {
+						if (currinkp < clientarea.right) { //this also checks for intersection at the bottom/right of the screen
+							intersects = false;
+							for (auto i : intersect) {
+								if (MergedCells[i].indX1 <= currinki && currinki <= MergedCells[i].indX2) {
+									intersects = true;
+									break;
+								}
+							}
+						}
+						else {
+							intersects = true;
+						}
+
+						if (currinkp > rowheaderwidth) { //this check is done since currinkp begins ABOVE the column header, might be able to optimize this by making a version of the loop that only executes once before this one
+							if (!intersects && previntersects) {
+								previnkp = currinkp;
+							}
+							else if (intersects && !previntersects) {
+								POINT ColHeaderSep[2] = { {previnkp, sumpos - vsi.nPos},{currinkp, sumpos - vsi.nPos} };
+								Polyline(PaintDC, ColHeaderSep, 2);
+							}
+						}
+
+						if (currinkp > clientarea.right) break;
+						currinkp += columnwidth[currinki];
+						currinki++;
+						previntersects = intersects;
+					}
 
 					if (updaterect.left < rowheaderwidth) { //only draw the row numbers if they are in the update region
 						RECT TextRect = { 0,sumpos - vsi.nPos - rowwidth[index - 1],rowheaderwidth - 1, sumpos - vsi.nPos };
@@ -882,7 +1095,7 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 			hsi.fMask = SIF_RANGE;
 			SetScrollInfo(windowhandle, SB_HORZ, &hsi, TRUE);
 			
-			if (hsi.nPos < hsi.nMax - (int)hsi.nPage) { //checks if the scroll position is less than the maximum after the the scroll info is changed 
+			if (/*TEMPORARY FIX*//*hsi.nPos < hsi.nMax - (int)hsi.nPage*/false) { //checks if the scroll position is less than the maximum after the the scroll info is changed 
 				hsi.fMask = SIF_POS; //take into account the fact that vertical scroll postion might change after resizing the cell
 				GetScrollInfo(windowhandle, SB_HORZ, &hsi);
 				clientrect.left = (initdragpos - hsi.nPos + rowheaderwidth) - columnwidth[dragindex]; //only invalidate to the right of changed cell
@@ -906,7 +1119,7 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 			vsi.fMask = SIF_RANGE;
 			SetScrollInfo(windowhandle, SB_VERT, &vsi, TRUE);
 			
-			if (vsi.nPos < vsi.nMax - (int)vsi.nPage) { //checks if the scroll position is less than the maximum after the the scroll info is changed 
+			if (false/*TEMPORARY FIX*//*vsi.nPos < vsi.nMax - (int)vsi.nPage*/) { //checks if the scroll position is less than the maximum after the the scroll info is changed 
 				vsi.fMask = SIF_POS; //take into account the fact that vertical scroll postion might change after resizing the cell
 				GetScrollInfo(windowhandle, SB_VERT, &vsi);
 				clientrect.top = (initdragpos - vsi.nPos + columnheaderwidth) - rowwidth[dragindex]; //only invalidate to the bottom of changed cell
