@@ -14,3 +14,6 @@ In your clone, open the file Eggcell.sln
 click on the green run button at the top
 
 Now the spreadsheet should run
+
+# Demo
+![Gif Illustrating spreadsheet in action](https://github.com/Shai7aleb/Eggcell/assets/96475434/d17850f2-6fde-4369-aed1-70ac7c40172f)
