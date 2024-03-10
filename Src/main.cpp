@@ -50,6 +50,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int cmdshow) {
 	HMENU mainmenu = CreateMenu();
 	InsertMenuW(mainmenu, -1, MF_BYPOSITION | MF_STRING, 0, L"Open");
 	InsertMenuW(mainmenu, -1, MF_BYPOSITION | MF_STRING, 1, L"Save");
+	InsertMenuW(mainmenu, -1, MF_BYPOSITION | MF_STRING, 2, L"Merge");
 
 	if (!mainclass) { return 120; }
 	if (!gridclass) { return 120; }
@@ -151,7 +152,7 @@ LRESULT CALLBACK mainwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 	case WM_COMMAND: {
 		if (HIWORD(wparam) == 0) { //comes from a menu
 			switch (LOWORD(wparam)) {
-			case 0: {
+			case 0: { //op3n button
 				OPENFILENAMEW ofn = { 0 };
 				ofn.lStructSize = sizeof(OPENFILENAMEW);
 				ofn.hwndOwner = windowhandle;
@@ -171,7 +172,7 @@ LRESULT CALLBACK mainwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 				delete[] ofn.lpstrFile;
 				break;
 			}
-			case 1: {
+			case 1: { //save button
 				OPENFILENAMEW ofn = { 0 };
 				ofn.lStructSize = sizeof(OPENFILENAMEW);
 				ofn.hwndOwner = windowhandle;
@@ -186,6 +187,9 @@ LRESULT CALLBACK mainwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 					SendMessageW(gridwin, WM_SAVE, NULL, (LPARAM)&ofn);
 				}
 				break;
+			}
+			case 2: { //merge button
+				SendMessageW(gridwin, WM_MERGE, NULL, NULL);
 			}
 			}
 		}
