@@ -51,6 +51,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int cmdshow) {
 	InsertMenuW(mainmenu, -1, MF_BYPOSITION | MF_STRING, 0, L"Open");
 	InsertMenuW(mainmenu, -1, MF_BYPOSITION | MF_STRING, 1, L"Save");
 	InsertMenuW(mainmenu, -1, MF_BYPOSITION | MF_STRING, 2, L"Merge");
+	InsertMenuW(mainmenu, -1, MF_BYPOSITION | MF_STRING, 3, L"Split");
 
 	if (!mainclass) { return 120; }
 	if (!gridclass) { return 120; }
@@ -190,6 +191,10 @@ LRESULT CALLBACK mainwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 			}
 			case 2: { //merge button
 				SendMessageW(gridwin, WM_MERGE, NULL, NULL);
+				break;
+			}
+			case 3: {
+				SendMessageW(gridwin, WM_SPLIT, NULL, NULL);
 			}
 			}
 		}

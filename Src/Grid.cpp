@@ -28,7 +28,7 @@ static int prevdragpos;
 const int clickrange = 4; //range of position before or after line where click would detect
 
 static bool rangedrag;
-static enum { mergebegin, mergedrag, mergenone } mergemode;
+static enum { mergebegin, mergedrag, mergenone, mergesplit } mergemode;
 static int initX; //initial drag position and index in worksheet space
 static int initY;
 static int initXpos;
@@ -207,7 +207,7 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 		MergedCells.push_back(MergedCell{ 0,5,20,20 });
 		MergedCells.push_back(MergedCell{ 0,5,21,21 });
 		MergedCells.push_back(MergedCell{ 6,6,0,5 });
-		MergedCells.push_back(MergedCell{ 7,7,0,5 });
+		MergedCells.push_back(MergedCell{ 11,11,1,6 });
 
 		//Config Font
 		SelectObject(DeviceContext, spFont);
@@ -774,6 +774,7 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 		bool clickedwithingrid = mx > rowheaderwidth && my > columnheaderwidth;
 		int Xind = 0,Yind = 0,Xpos = 0,Ypos = 0;
 		RECT tofill;
+		int mergeIndex = -1; //index of intersected merged cell in the MergedCells list,
 		if (clickedwithingrid) {
 			while (Xpos + columnwidth[Xind] < mx + hsi.nPos - rowheaderwidth) {
 				Xpos += columnwidth[Xind];
@@ -791,14 +792,16 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 			int Xpos2 = Xpos + columnwidth[Xind];
 			int Ypos2 = Ypos + rowwidth[Yind];
 
-			for (auto& i : MergedCells) {
-				if (i.indX1 <= Xind && i.indX2 >= Xind && i.indY1 <= Yind && i.indY2 >= Yind) {
-					while (Xind > i.indX1) {
+			for (unsigned i = 0; i < MergedCells.size(); i++) {
+				auto& mcell = MergedCells[i];
+				if (mcell.indX1 <= Xind && mcell.indX2 >= Xind && mcell.indY1 <= Yind && mcell.indY2 >= Yind) {
+					mergeIndex = i;
+					while (Xind > mcell.indX1) {
 						Xpos -= columnwidth[Xind - 1];
 						Xind--;
 					}
 
-					while (Yind > i.indY1) {
+					while (Yind > mcell.indY1) {
 						Ypos -= rowwidth[Yind - 1];
 						Yind--;
 					}
@@ -807,12 +810,12 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 					int Yind2 = Yind;
 					Xpos2 = Xpos;
 					Ypos2 = Ypos;
-					while (Xind2 <= i.indX2) {
+					while (Xind2 <= mcell.indX2) {
 						Xpos2 += columnwidth[Xind2];
 						Xind2++;
 					}
 
-					while (Yind2 <= i.indY2) {
+					while (Yind2 <= mcell.indY2) {
 						Ypos2 += rowwidth[Yind2];
 						Yind2++;
 					}
@@ -849,6 +852,15 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 				HDC dc = GetDC(windowhandle);
 				InvertRect(dc, prevX1, prevY1, prevX2, prevY2);
 				ReleaseDC(windowhandle, dc);
+			}
+			else if (mergemode == mergesplit) {
+				if (mergeIndex != -1) {
+					MergedCells.erase(std::next(MergedCells.begin(), mergeIndex));
+					RECT clientrect; GetClientRect(windowhandle, &clientrect);
+					clientrect.top += columnheaderwidth;
+					clientrect.left += rowheaderwidth;
+					InvalidateRect(windowhandle, &clientrect, TRUE);
+				}
 			}
 			else if ((EditWindow == NULL || WindowContent[0] != L'=' || start == 0)) {
 				if (EditWindow != NULL) { //apply and destroy old window if there exists an edit window;
@@ -1072,20 +1084,74 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 				Xpos += columnwidth[Xind];
 				Xind++;
 			}
-			Xpos -= hsi.nPos - rowheaderwidth; //convert to client space
 
 			while (Ypos + rowwidth[Yind] < my + vsi.nPos - columnheaderwidth) {
 				Ypos += rowwidth[Yind];
 				Yind++;
 			}
-			Ypos -= vsi.nPos - columnheaderwidth; //convert to client space
+
+
+			//check if overlapping any merged cells and expand range selection to encompass the whole merge cell
+			int defactoInitXi = initX;
+			int defactoInitXpos = initXpos;
+			int defactoInitYi = initY;
+			int defactoInitYpos = initYpos;
+
+			//inits should be less or equal Xind
+			if (initX > Xind) {
+				std::swap(defactoInitXi, Xind);
+				std::swap(defactoInitXpos, Xpos);
+			}
+
+			if (initY > Yind) {
+				std::swap(defactoInitYi, Yind);
+				std::swap(defactoInitYpos, Ypos);
+			}
+
+			//selected region should be expanded such that no merged cells are partially selected
+			//This is a naive algorithm, maybe improve it later
+			while (true) {
+				bool regionAdjusted = false;
+
+				for (auto& i : MergedCells) {
+					if ((Xind >= i.indX1 && defactoInitXi <= i.indX2) && (Yind >= i.indY1 && defactoInitYi <= i.indY2)) {
+						while (i.indX1 < defactoInitXi) {
+							defactoInitXpos -= columnwidth[defactoInitXi - 1];
+							defactoInitXi--;
+							regionAdjusted = true;
+						}
+
+						while (i.indX2 > Xind) {
+							Xpos += columnwidth[Xind];
+							Xind++;
+							regionAdjusted = true;
+						}
+
+						while (i.indY1 < defactoInitYi) {
+							defactoInitYpos -= rowwidth[defactoInitYi - 1];
+							defactoInitYi--;
+							regionAdjusted = true;
+						}
+
+						while (i.indY2 > Yind) {
+							Ypos += rowwidth[Yind];
+							Yind++;
+							regionAdjusted = true;
+						}
+					}
+				}
+
+				if (!regionAdjusted) break;
+			}
 
 			//begin handling blitting stuff
 			HDC dc = GetDC(windowhandle);
 			InvertRect(dc, prevX1, prevY1, prevX2, prevY2); //erase
 
-			int csinitXpos = initXpos - hsi.nPos + rowheaderwidth;
-			int csinitYpos = initYpos - vsi.nPos + columnheaderwidth;
+			Ypos -= vsi.nPos - columnheaderwidth; //convert to client space
+			Xpos -= hsi.nPos - rowheaderwidth; //convert to client space
+			int csinitXpos = defactoInitXpos - hsi.nPos + rowheaderwidth;
+			int csinitYpos = defactoInitYpos - vsi.nPos + columnheaderwidth;
 
 			prevX1 = std::min(csinitXpos, Xpos);
 			prevY1 = std::min(csinitYpos, Ypos);
@@ -1103,7 +1169,7 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 				SendMessageW(EditWindow, EM_GETSEL, (WPARAM)&Start, (LPARAM)&End);
 				Start = std::min(Start, End);
 
-				if (Xind == initX && Yind == initY) {
+				if (Xind == defactoInitXi && Yind == defactoInitYi) {
 					WCHAR* strptr = IndToCol(Xind, Yind);
 
 					SendMessageW(EditWindow, EM_REPLACESEL, FALSE, (LPARAM)strptr);
@@ -1112,7 +1178,7 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 					delete[] strptr;
 				}
 				else {
-					WCHAR* strptr1 = IndToCol(initX, initY);
+					WCHAR* strptr1 = IndToCol(defactoInitXi, defactoInitYi);
 					WCHAR* strptr2 = IndToCol(Xind, Yind);
 					WCHAR* strptrc = new WCHAR[128];
 
@@ -1213,16 +1279,37 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 				Yind++;
 			}
 
+			//dont merge if the selected region is 1x1 (i.e. a single cell)
+			if (initX == Xind && initY == Yind) {
+				goto skipmerge;
+			}
+
+			//inits should be less or equal Xind
+			if (initX > Xind) {
+				std::swap(initX, Xind);
+			}
+
+			if (initY > Yind) {
+				std::swap(initY, Yind);
+			}
+
+			//check if selected region overlaps any previously existing merged cells
+			for (auto& i : MergedCells) {
+				if ((Xind >= i.indX1 && initX <= i.indX2) && (Yind >= i.indY1 && initY <= i.indY2)) {
+					MessageBoxA(NULL, "The range you want to merge already contains merged cells", "Merge Error", MB_ICONERROR);
+					goto skipmerge;
+				}
+			}
+
 			MergedCells.push_back(
 				MergedCell{
-					(unsigned)std::min(initX,Xind),
-					(unsigned)std::max(initX,Xind),
-					(unsigned)std::min(initY,Yind),
-					(unsigned)std::max(initY,Yind)
+					(unsigned)initX, (unsigned)Xind,
+					(unsigned)initY, (unsigned)Yind
 				}
 			);
 
 			InvalidateRect(windowhandle, NULL, TRUE);
+		skipmerge:;
 		}
 		break;
 	}
@@ -1452,6 +1539,7 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 		
 		CloseHandle(filehandle);
 		return toret;
+		break;
 	}
 	case WM_MERGE: {
 		rangedrag = false;
@@ -1470,6 +1558,26 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 			DestroyWindow(EditWindow);
 		}
 		mergemode = mergebegin;
+		break;
+	}
+	case WM_SPLIT: {
+		rangedrag = false;
+		dragmode = none;
+
+		WCHAR* WindowContent = new WCHAR[GetWindowTextLengthW(EditWindow) + (size_t)1/*null terminator*/];
+		if (!WindowContent) MessageBoxA(NULL, "Allocation Failure", "Allocation Failure", MB_ICONERROR);
+
+		if (EditWindow != NULL) { //apply and destroy old window if there exists an edit window;
+			GetWindowTextW(EditWindow, WindowContent, INT_MAX);
+			(void)OneWkst.SetCell(WindowContent, EditX, EditY);
+			RECT clientrect; GetClientRect(windowhandle, &clientrect);
+			clientrect.top += columnheaderwidth;
+			clientrect.left += rowheaderwidth;
+			InvalidateRect(windowhandle, &clientrect, TRUE);
+			DestroyWindow(EditWindow);
+		}
+		mergemode = mergesplit;
+		break;
 	}
 	}
 
