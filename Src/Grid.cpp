@@ -43,17 +43,6 @@ static unsigned short columnwidth[sheetwidth];
 static int rowheaderwidth = 35;
 static int columnheaderwidth = 35;
 
-struct MergedCell {
-	unsigned indX1;
-	unsigned indX2;
-	unsigned indY1;
-	unsigned indY2;
-	unsigned posX;
-	unsigned posY;
-};
-
-static std::vector<MergedCell> MergedCells;
-
 static inline int CeilDiv(int n, int d) { //divison such that the ceiling of the quotient is returned (if numerator and denominator have the same sign)
 	return ((n - 1) / d) + 1;
 }
@@ -201,13 +190,13 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 		OneWkst.SetCell(L"Yet Another Merged Cell!", 0, 21);
 
 		//merge some cells
-		MergedCells.push_back(MergedCell{ 0,5,0,0 });
-		MergedCells.push_back(MergedCell{ 0,5,1,1 });
-		MergedCells.push_back(MergedCell{ 0,5,4,4 });
-		MergedCells.push_back(MergedCell{ 0,5,20,20 });
-		MergedCells.push_back(MergedCell{ 0,5,21,21 });
-		MergedCells.push_back(MergedCell{ 6,6,0,5 });
-		MergedCells.push_back(MergedCell{ 11,11,1,6 });
+		OneWkst.MergedCells.push_back(WorkSheet::MergedCell{ 0,5,0,0 });
+		OneWkst.MergedCells.push_back(WorkSheet::MergedCell{ 0,5,1,1 });
+		OneWkst.MergedCells.push_back(WorkSheet::MergedCell{ 0,5,4,4 });
+		OneWkst.MergedCells.push_back(WorkSheet::MergedCell{ 0,5,20,20 });
+		OneWkst.MergedCells.push_back(WorkSheet::MergedCell{ 0,5,21,21 });
+		OneWkst.MergedCells.push_back(WorkSheet::MergedCell{ 6,6,0,5 });
+		OneWkst.MergedCells.push_back(WorkSheet::MergedCell{ 11,11,1,6 });
 
 		//Config Font
 		SelectObject(DeviceContext, spFont);
@@ -455,7 +444,7 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 					int Xi2;
 					int Yi2;
 					
-					for (auto i : MergedCells) {
+					for (auto i : OneWkst.MergedCells) {
 						if ((int)i.indX1 <= Xi && Xi <= (int)i.indX2 && (int)i.indY1 <= Yi && Yi <= (int)i.indY2) {
 							intersectmerge = true;
 							Xi2 = i.indX2;
@@ -481,7 +470,7 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 			}
 
 			//draw the text to be displayed in merged cells
-			for (auto i : MergedCells) {
+			for (auto i : OneWkst.MergedCells) {
 				if (i.indX2 >= minXi && i.indY2 >= minYi) {
 					int trackX1p, trackX2p;
 					int trackY1p, trackY2p;
@@ -593,8 +582,8 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 					}
 					
 					std::vector<unsigned> intersect; /*Get list of Merged Cells that intersect*/
-					for (int i = 0; i < MergedCells.size(); i++) {
-						if (MergedCells[i].indX1 < (unsigned)index && (unsigned)index <= MergedCells[i].indX2) {
+					for (int i = 0; i < OneWkst.MergedCells.size(); i++) {
+						if (OneWkst.MergedCells[i].indX1 < (unsigned)index && (unsigned)index <= OneWkst.MergedCells[i].indX2) {
 							intersect.push_back(i);
 						}
 					}
@@ -610,7 +599,7 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 						if (currinkp < clientarea.bottom) { //this also checks for intersection at the bottom/right of the screen
 							intersects = false;
 							for (auto i : intersect) {
-								if (MergedCells[i].indY1 <= currinki && currinki <= MergedCells[i].indY2) {
+								if (OneWkst.MergedCells[i].indY1 <= currinki && currinki <= OneWkst.MergedCells[i].indY2) {
 									intersects = true;
 									break;
 								}
@@ -675,8 +664,8 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 					}
 
 					std::vector<unsigned> intersect; /*Get list of Merged Cells that intersect*/
-					for (int i = 0; i < MergedCells.size(); i++) {
-						if (MergedCells[i].indY1 < (unsigned)index && (unsigned)index <= MergedCells[i].indY2) {
+					for (int i = 0; i < OneWkst.MergedCells.size(); i++) {
+						if (OneWkst.MergedCells[i].indY1 < (unsigned)index && (unsigned)index <= OneWkst.MergedCells[i].indY2) {
 							intersect.push_back(i);
 						}
 					}
@@ -692,7 +681,7 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 						if (currinkp < clientarea.right) { //this also checks for intersection at the bottom/right of the screen
 							intersects = false;
 							for (auto i : intersect) {
-								if (MergedCells[i].indX1 <= currinki && currinki <= MergedCells[i].indX2) {
+								if (OneWkst.MergedCells[i].indX1 <= currinki && currinki <= OneWkst.MergedCells[i].indX2) {
 									intersects = true;
 									break;
 								}
@@ -774,7 +763,7 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 		bool clickedwithingrid = mx > rowheaderwidth && my > columnheaderwidth;
 		int Xind = 0,Yind = 0,Xpos = 0,Ypos = 0;
 		RECT tofill;
-		int mergeIndex = -1; //index of intersected merged cell in the MergedCells list,
+		int mergeIndex = -1; //index of intersected merged cell in the OneWkst.MergedCells list,
 		if (clickedwithingrid) {
 			while (Xpos + columnwidth[Xind] < mx + hsi.nPos - rowheaderwidth) {
 				Xpos += columnwidth[Xind];
@@ -792,8 +781,8 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 			int Xpos2 = Xpos + columnwidth[Xind];
 			int Ypos2 = Ypos + rowwidth[Yind];
 
-			for (unsigned i = 0; i < MergedCells.size(); i++) {
-				auto& mcell = MergedCells[i];
+			for (unsigned i = 0; i < OneWkst.MergedCells.size(); i++) {
+				auto& mcell = OneWkst.MergedCells[i];
 				if (mcell.indX1 <= Xind && mcell.indX2 >= Xind && mcell.indY1 <= Yind && mcell.indY2 >= Yind) {
 					mergeIndex = i;
 					while (Xind > mcell.indX1) {
@@ -844,10 +833,10 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 				initYpos = Ypos + vsi.nPos - columnheaderwidth;
 				mergemode = mergedrag;
 				//Draw rectangle and set the prev coords
-				prevX1 = Xpos;
-				prevY1 = Ypos;
-				prevX2 = Xpos + columnwidth[Xind];
-				prevY2 = Ypos + rowwidth[Yind];
+				prevX1 = tofill.left;
+				prevY1 = tofill.top;
+				prevX2 = tofill.right;
+				prevY2 = tofill.bottom;
 
 				HDC dc = GetDC(windowhandle);
 				InvertRect(dc, prevX1, prevY1, prevX2, prevY2);
@@ -855,12 +844,13 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 			}
 			else if (mergemode == mergesplit) {
 				if (mergeIndex != -1) {
-					MergedCells.erase(std::next(MergedCells.begin(), mergeIndex));
+					OneWkst.MergedCells.erase(std::next(OneWkst.MergedCells.begin(), mergeIndex));
 					RECT clientrect; GetClientRect(windowhandle, &clientrect);
 					clientrect.top += columnheaderwidth;
 					clientrect.left += rowheaderwidth;
 					InvalidateRect(windowhandle, &clientrect, TRUE);
 				}
+				mergemode = mergenone; //reset after clicking
 			}
 			else if ((EditWindow == NULL || WindowContent[0] != L'=' || start == 0)) {
 				if (EditWindow != NULL) { //apply and destroy old window if there exists an edit window;
@@ -899,10 +889,10 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 				initYpos = Ypos + vsi.nPos - columnheaderwidth;
 				rangedrag = true;
 				//Draw rectangle and set the prev coords
-				prevX1 = Xpos;
-				prevY1 = Ypos;
-				prevX2 = Xpos + columnwidth[Xind];
-				prevY2 = Ypos + rowwidth[Yind];
+				prevX1 = tofill.left;
+				prevY1 = tofill.top;
+				prevX2 = tofill.right;
+				prevY2 = tofill.bottom;
 
 				HDC dc = GetDC(windowhandle);
 				InvertRect(dc, prevX1, prevY1, prevX2, prevY2);
@@ -1113,7 +1103,7 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 			while (true) {
 				bool regionAdjusted = false;
 
-				for (auto& i : MergedCells) {
+				for (auto& i : OneWkst.MergedCells) {
 					if ((Xind >= i.indX1 && defactoInitXi <= i.indX2) && (Yind >= i.indY1 && defactoInitYi <= i.indY2)) {
 						while (i.indX1 < defactoInitXi) {
 							defactoInitXpos -= columnwidth[defactoInitXi - 1];
@@ -1294,15 +1284,15 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 			}
 
 			//check if selected region overlaps any previously existing merged cells
-			for (auto& i : MergedCells) {
+			for (auto& i : OneWkst.MergedCells) {
 				if ((Xind >= i.indX1 && initX <= i.indX2) && (Yind >= i.indY1 && initY <= i.indY2)) {
 					MessageBoxA(NULL, "The range you want to merge already contains merged cells", "Merge Error", MB_ICONERROR);
 					goto skipmerge;
 				}
 			}
 
-			MergedCells.push_back(
-				MergedCell{
+			OneWkst.MergedCells.push_back(
+				WorkSheet::MergedCell{
 					(unsigned)initX, (unsigned)Xind,
 					(unsigned)initY, (unsigned)Yind
 				}

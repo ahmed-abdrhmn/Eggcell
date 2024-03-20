@@ -8,6 +8,7 @@
 #define SET_CELL_OK 0
 #define SET_CELL_ERR_CIRCULAR_REF 1
 
+
 class WorkSheet {
 public:	
 	//This is the cell struct that is public
@@ -25,6 +26,17 @@ public:
 		unsigned row;
 		std::wstring cellitem;
 	};
+
+	struct MergedCell {
+		unsigned indX1;
+		unsigned indX2;
+		unsigned indY1;
+		unsigned indY2;
+		unsigned posX;
+		unsigned posY;
+	};
+
+	std::vector<MergedCell> MergedCells;
 
 private:
 	//This is the cell struct interally managed by the Worksheet class
