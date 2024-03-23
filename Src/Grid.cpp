@@ -1021,6 +1021,14 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 		break;
 	}
 	case WM_MOUSEMOVE: {
+		//check if the left mouse button is down, if it isn't, abort this case and trigeer WM_LBUTTONUP event
+		//this remove that janky behaviour where it keeps "dragging" even if the user isn't holding the left button due the window
+		//not being in focus when they lifted left click
+		if (!(wparam & MK_LBUTTON)) {
+			SendMessageW(windowhandle, WM_LBUTTONUP, wparam, lparam);
+			goto skipmousemove;
+		}
+
 		int mx, my; //mousex and mousey
 		RECT clientrect; GetClientRect(windowhandle, &clientrect);
 		if (dragmode == horz) {
@@ -1185,6 +1193,7 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 				}
 			}
 		}
+		skipmousemove:
 		break;
 	}
 	case WM_LBUTTONUP: {
@@ -1288,6 +1297,25 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 				if ((Xind >= i.indX1 && initX <= i.indX2) && (Yind >= i.indY1 && initY <= i.indY2)) {
 					MessageBoxA(NULL, "The range you want to merge already contains merged cells", "Merge Error", MB_ICONERROR);
 					goto skipmerge;
+				}
+			}
+
+			//Erase cells that would be occupied by the new merged cell
+			{ /*Must put this in braces so compiler doesn't complain about goto bypassing initializaiton*/
+				bool messageShown = false;
+				for (unsigned i = initX; i <= Xind; i++) {
+					for (unsigned j = initY; j <= Yind; j++) {
+						if (i != initX || j != initY) { //ignore top left cell in the range
+							if (!messageShown && OneWkst.GetCell(i, j).type != WorkSheet::cell::type::null) {
+								int erase = MessageBoxW(NULL, L"This merge operation will erase data in the selected region. Do you want to continue?", L"Merge Override", MB_ICONEXCLAMATION || MB_OKCANCEL);
+								if (erase != IDOK) {
+									goto skipmerge;
+								}
+								messageShown = true;
+							}
+							OneWkst.SetCell(L"", i, j);
+						}
+					}
 				}
 			}
 
@@ -1546,6 +1574,7 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 			clientrect.left += rowheaderwidth;
 			InvalidateRect(windowhandle, &clientrect, TRUE);
 			DestroyWindow(EditWindow);
+			EditWindow = NULL; //must set edit window to null after deleting it to prevent weird cell erases when clicking
 		}
 		mergemode = mergebegin;
 		break;
@@ -1565,6 +1594,7 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 			clientrect.left += rowheaderwidth;
 			InvalidateRect(windowhandle, &clientrect, TRUE);
 			DestroyWindow(EditWindow);
+			EditWindow = NULL;
 		}
 		mergemode = mergesplit;
 		break;
