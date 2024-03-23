@@ -140,13 +140,13 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 			columnwidth[i] = 125;
 		}
 
-		columnwidth[0] = 27;
-		columnwidth[5] = 300;
-		columnwidth[sheetwidth - 1] = 300;
+		//columnwidth[0] = 27;
+		//columnwidth[5] = 300;
+		//columnwidth[sheetwidth - 1] = 300;
 
-		rowwidth[0] = 27;
-		rowwidth[5] = 50;
-		rowwidth[sheetheight - 1] = 50;
+		//rowwidth[0] = 27;
+		//rowwidth[5] = 50;
+		//rowwidth[sheetheight - 1] = 50;
 
 		int Totalheight = 0;
 		for (unsigned i = 0; i < sizeof(rowwidth) / sizeof (unsigned short); i++) {
@@ -182,21 +182,21 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 		SetScrollInfo(windowhandle, SB_VERT, &si, TRUE);
 		
 		//Insert Placeholder data into spreadsheet
-		OneWkst.SetCell(L"Hello", 6, 0);
-		OneWkst.SetCell(L"This is a merged Cell", 7, 0);
-		OneWkst.SetCell(L"lalal", 8, 8);
-		OneWkst.SetCell(L"هلا بالخميس", 0, 0);
-		OneWkst.SetCell(L"Another Merged Cell!",0,20);
-		OneWkst.SetCell(L"Yet Another Merged Cell!", 0, 21);
+		//OneWkst.SetCell(L"Hello", 6, 0);
+		//OneWkst.SetCell(L"This is a merged Cell", 7, 0);
+		//OneWkst.SetCell(L"lalal", 8, 8);
+		//OneWkst.SetCell(L"هلا بالخميس", 0, 0);
+		//OneWkst.SetCell(L"Another Merged Cell!",0,20);
+		//OneWkst.SetCell(L"Yet Another Merged Cell!", 0, 21);
 
 		//merge some cells
-		OneWkst.MergedCells.push_back(WorkSheet::MergedCell{ 0,5,0,0 });
-		OneWkst.MergedCells.push_back(WorkSheet::MergedCell{ 0,5,1,1 });
-		OneWkst.MergedCells.push_back(WorkSheet::MergedCell{ 0,5,4,4 });
-		OneWkst.MergedCells.push_back(WorkSheet::MergedCell{ 0,5,20,20 });
-		OneWkst.MergedCells.push_back(WorkSheet::MergedCell{ 0,5,21,21 });
-		OneWkst.MergedCells.push_back(WorkSheet::MergedCell{ 6,6,0,5 });
-		OneWkst.MergedCells.push_back(WorkSheet::MergedCell{ 11,11,1,6 });
+		//OneWkst.MergedCells.push_back(WorkSheet::MergedCell{ 0,5,0,0 });
+		//OneWkst.MergedCells.push_back(WorkSheet::MergedCell{ 0,5,1,1 });
+		//OneWkst.MergedCells.push_back(WorkSheet::MergedCell{ 0,5,4,4 });
+		//OneWkst.MergedCells.push_back(WorkSheet::MergedCell{ 0,5,20,20 });
+		//OneWkst.MergedCells.push_back(WorkSheet::MergedCell{ 0,5,21,21 });
+		//OneWkst.MergedCells.push_back(WorkSheet::MergedCell{ 6,6,0,5 });
+		//OneWkst.MergedCells.push_back(WorkSheet::MergedCell{ 11,11,1,6 });
 
 		//Config Font
 		SelectObject(DeviceContext, spFont);
@@ -1396,6 +1396,11 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 
 		/*encoding the input data in the cells*/ {
 			std::vector<WorkSheet::CellIndexPair> cipvector = OneWkst.SerializeCells();
+			
+			//number of cell data
+			unsigned numberOfData = _byteswap_ulong((unsigned)cipvector.size());
+			WriteFile(filehandle, &numberOfData, sizeof(numberOfData), &byteswritten, NULL);
+			
 			for (auto& i : cipvector) {
 				unsigned column = _byteswap_ulong( i.column); //little to big endian
 				unsigned row = _byteswap_ulong( i.row );
@@ -1408,6 +1413,25 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 					WriteFile(filehandle, &j, sizeof(j), &byteswritten, NULL);
 				}
 				WriteFile(filehandle, L"\0", sizeof(wchar_t), &byteswritten, NULL); //null terminator
+			}
+		}
+
+		/*encoding the merged cells*/ {
+			//number of merged cells
+			unsigned numberOfMergedCells = _byteswap_ulong((unsigned)OneWkst.MergedCells.size());
+			WriteFile(filehandle, &numberOfMergedCells, sizeof(numberOfMergedCells), &byteswritten, NULL);
+
+			for (auto& i : OneWkst.MergedCells) {
+				unsigned buffer[6];
+
+				buffer[0] = _byteswap_ulong(i.indX1);
+				buffer[1] = _byteswap_ulong(i.indX2);
+				buffer[2] = _byteswap_ulong(i.indY1);
+				buffer[3] = _byteswap_ulong(i.indY2);
+				buffer[4] = _byteswap_ulong(i.posX);
+				buffer[5] = _byteswap_ulong(i.posY);
+
+				WriteFile(filehandle, buffer, sizeof(buffer), &byteswritten, NULL);
 			}
 		}
 
@@ -1497,15 +1521,21 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 		}
 
 		/*Loading the data in the cells*/
-		while (1) {
+		unsigned numberOfData; //number of cell data
+		(void)ReadFile(filehandle, &numberOfData, sizeof(numberOfData), &bytesread, NULL);
+		if (bytesread < sizeof(numberOfData)) {
+			goto abort;
+		}
+		numberOfData = _byteswap_ulong(numberOfData);
+		
+		for (unsigned i = 0; i < numberOfData; i++) {
 			cipvector.push_back(WorkSheet::CellIndexPair());
 			WorkSheet::CellIndexPair& temp = cipvector.back();
 			unsigned column;
 			unsigned row;
 
 			(void)ReadFile(filehandle, &column, sizeof(column), &bytesread, NULL);
-			if (bytesread == 0) { break; } //we have reached the end of the file
-			else if (bytesread < sizeof(column)) { goto abort; }
+			if (bytesread < sizeof(column)) { goto abort; }
 
 			(void)ReadFile(filehandle, &row, sizeof(row), &bytesread, NULL);
 			if (bytesread < sizeof(row)) { goto abort; }
@@ -1526,6 +1556,35 @@ LRESULT CALLBACK gridwndproc(HWND windowhandle, UINT msg, WPARAM wparam, LPARAM 
 				data.push_back(character);
 			}
 			temp.cellitem = std::move(data);
+		}
+
+		/*Loading the merged cells*/
+		unsigned numberOfMergedCells; //number of cell data
+		(void)ReadFile(filehandle, &numberOfMergedCells, sizeof(numberOfMergedCells), &bytesread, NULL);
+		if (bytesread < sizeof(numberOfMergedCells)) {
+			goto abort;
+		}
+		numberOfMergedCells = _byteswap_ulong(numberOfMergedCells);
+
+		OneWkst.MergedCells.clear();
+		for (unsigned i = 0; i < numberOfMergedCells; i++) {
+			unsigned buffer[6];
+			WorkSheet::MergedCell mergedCell;
+
+
+			(void)ReadFile(filehandle, buffer, sizeof(buffer), &bytesread, NULL);
+			if (bytesread < sizeof(buffer)) {
+				goto abort;
+			}
+			
+			mergedCell.indX1 = _byteswap_ulong(buffer[0]);
+			mergedCell.indX2 = _byteswap_ulong(buffer[1]);
+			mergedCell.indY1 = _byteswap_ulong(buffer[2]);
+			mergedCell.indY2 = _byteswap_ulong(buffer[3]);
+			mergedCell.posX = _byteswap_ulong(buffer[4]);
+			mergedCell.posY = _byteswap_ulong(buffer[5]);
+
+			OneWkst.MergedCells.push_back(mergedCell);
 		}
 
 		//The loading process has succeeded, now change current states
